@@ -82,9 +82,14 @@ export async function register(req: Request, res: Response): Promise<void> {
 
 export async function login(req: Request, res: Response): Promise<void> {
   try {
-    const { identifier, password } = req.body;
+    const { identifier, password, email, phone } = req.body;
+    const loginIdentifier = identifier || email || phone;
+    if (!loginIdentifier || !password) {
+      sendError(res, "Email/phone and password are required.", 400, "MISSING_FIELDS");
+      return;
+    }
     const user = await prisma.user.findFirst({
-      where: { OR: [{ email: identifier }, { phone: identifier }] },
+      where: { OR: [{ email: loginIdentifier }, { phone: loginIdentifier }] },
     });
     if (!user) {
       sendError(res, "Invalid credentials.", 401, "INVALID_CREDENTIALS");
