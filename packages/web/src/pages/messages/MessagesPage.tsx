@@ -1,4 +1,6 @@
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { api } from '../../lib/api'
 
 interface Conversation {
   id: number
@@ -8,13 +10,28 @@ interface Conversation {
   unread: boolean
 }
 
-const conversations: Conversation[] = [
-  { id: 1, name: 'Alice Johnson', lastMessage: 'See you tomorrow!', time: '2 min ago', unread: true },
-  { id: 2, name: 'Bob Smith', lastMessage: 'Thanks for the walk', time: '1 hour ago', unread: false },
-  { id: 3, name: 'Carol White', lastMessage: 'Can we reschedule?', time: '3 hours ago', unread: true },
-]
-
 export function MessagesPage() {
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchConversations = async () => {
+      try {
+        const res = await api.get<Conversation[]>('/messages/conversations')
+        setConversations(res.data)
+      } catch (err) {
+        setError('Failed to load conversations')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchConversations()
+  }, [])
+
+  if (loading) return <div className="text-center py-12 text-gray-500">Loading...</div>
+  if (error) return <div className="text-center py-12 text-red-600">{error}</div>
+
   return (
     <div className="max-w-3xl">
       <h2 className="text-2xl font-bold text-gray-900 mb-6">Messages</h2>

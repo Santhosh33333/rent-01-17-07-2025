@@ -28,7 +28,7 @@ import { MessagesPage } from './pages/messages/MessagesPage'
 import { ConversationPage } from './pages/messages/ConversationPage'
 import { ApplyPage } from './pages/walking-partner/ApplyPage'
 import { StatusPage } from './pages/walking-partner/StatusPage'
-import { AdminLoginPage } from './pages/admin/AdminLoginPage'
+import { AdminPortalPage } from './pages/admin/AdminPortalPage'
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage'
 import { AdminUsersPage } from './pages/admin/AdminUsersPage'
 import { AdminKycPage } from './pages/admin/AdminKycPage'
@@ -67,7 +67,7 @@ function App() {
           <Route path="/messages/:userId" element={<ProtectedRoute><ConversationPage /></ProtectedRoute>} />
           <Route path="/walking-partner/apply" element={<ProtectedRoute><ApplyPage /></ProtectedRoute>} />
           <Route path="/walking-partner/status" element={<ProtectedRoute><StatusPage /></ProtectedRoute>} />
-          <Route path="/admin/login" element={<AdminLoginPage />} />
+          <Route path="/admin/portal" element={<ProtectedRoute><AdminPortalPage /></ProtectedRoute>} />
           <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
           <Route path="/admin/users" element={<AdminRoute><AdminUsersPage /></AdminRoute>} />
           <Route path="/admin/kyc" element={<AdminRoute><AdminKycPage /></AdminRoute>} />

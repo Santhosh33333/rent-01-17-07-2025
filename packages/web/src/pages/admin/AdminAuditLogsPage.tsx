@@ -1,3 +1,6 @@
+import { useState, useEffect } from 'react'
+import { api } from '../../lib/api'
+
 interface AuditLog {
   id: number
   action: string
@@ -6,14 +9,28 @@ interface AuditLog {
   details: string
 }
 
-const logs: AuditLog[] = [
-  { id: 1, action: 'USER_LOGIN', user: 'Alice Johnson', timestamp: '2025-01-15T10:30:00Z', details: 'Successful login' },
-  { id: 2, action: 'USER_UPDATE', user: 'Bob Smith', timestamp: '2025-01-15T09:15:00Z', details: 'Profile updated' },
-  { id: 3, action: 'WITHDRAWAL_APPROVED', user: 'Admin', timestamp: '2025-01-14T16:45:00Z', details: 'Withdrawal #123 approved' },
-  { id: 4, action: 'KYC_REJECTED', user: 'Admin', timestamp: '2025-01-14T14:20:00Z', details: 'KYC request #456 rejected' },
-]
-
 export function AdminAuditLogsPage() {
+  const [logs, setLogs] = useState<AuditLog[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchLogs = async () => {
+      try {
+        const res = await api.get<AuditLog[]>('/admin/audit-logs')
+        setLogs(res.data)
+      } catch (err) {
+        setError('Failed to load audit logs')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchLogs()
+  }, [])
+
+  if (loading) return <div className="text-center py-12 text-gray-500">Loading...</div>
+  if (error) return <div className="text-center py-12 text-red-600">{error}</div>
+
   return (
     <div className="space-y-4">
       <div className="card overflow-hidden">

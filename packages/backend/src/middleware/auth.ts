@@ -2,7 +2,7 @@ import { Response, NextFunction } from "express";
 import { verifyAccessToken } from "../utils/jwt";
 import { prisma } from "../config/database";
 import { sendError } from "../utils/response";
-import { AuthedRequest } from "./authTypes";
+import { AuthedRequest, AuthenticatedUser } from "./authTypes";
 
 export async function authenticateToken(req: AuthedRequest, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -17,7 +17,7 @@ export async function authenticateToken(req: AuthedRequest, res: Response, next:
 
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, email: true, status: true },
+      select: { id: true, email: true, status: true, role: true },
     });
 
     if (!user) {
@@ -30,7 +30,7 @@ export async function authenticateToken(req: AuthedRequest, res: Response, next:
       return;
     }
 
-    req.user = { userId: user.id, email: user.email };
+    req.user = { userId: user.id, email: user.email, role: user.role as AuthenticatedUser["role"] };
     next();
   } catch (err) {
     sendError(res, "Invalid or expired token.", 401, "INVALID_TOKEN");
@@ -79,7 +79,7 @@ export async function requireWalkingPartner(req: AuthedRequest, res: Response, n
 
 export async function requireAdmin(req: AuthedRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    if (!req.user || !req.user.isAdmin) {
+    if (!req.user?.role || !["SUPER_ADMIN", "ADMIN", "MODERATOR", "SUPPORT", "FINANCE"].includes(req.user.role)) {
       sendError(res, "Admin access required.", 403, "FORBIDDEN");
       return;
     }
@@ -91,7 +91,7 @@ export async function requireAdmin(req: AuthedRequest, res: Response, next: Next
 
 export async function requireSuperAdmin(req: AuthedRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    if (!req.user || !req.user.isAdmin || req.user.adminRole !== "SUPER_ADMIN") {
+    if (!req.user?.role || req.user.role !== "SUPER_ADMIN") {
       sendError(res, "Super admin access required.", 403, "FORBIDDEN");
       return;
     }

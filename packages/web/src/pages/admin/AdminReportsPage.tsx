@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { api } from '../../lib/api'
 
 interface Report {
   id: number
@@ -9,17 +10,36 @@ interface Report {
   date: string
 }
 
-const reports: Report[] = [
-  { id: 1, reporter: 'Alice Johnson', reportedUser: 'Bob Smith', reason: 'Inappropriate behavior', status: 'open', date: '2025-01-15' },
-  { id: 2, reporter: 'Carol White', reportedUser: 'Dave Brown', reason: 'No show', status: 'resolved', date: '2025-01-14' },
-]
-
 export function AdminReportsPage() {
-  const [list, setList] = useState(reports)
+  const [list, setList] = useState<Report[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleResolve = (id: number) => {
-    setList(list.map(r => r.id === id ? { ...r, status: 'resolved' } : r))
+  useEffect(() => {
+    const fetchReports = async () => {
+      try {
+        const res = await api.get<Report[]>('/admin/reports')
+        setList(res.data)
+      } catch (err) {
+        setError('Failed to load reports')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchReports()
+  }, [])
+
+  const handleResolve = async (id: number) => {
+    try {
+      await api.post(`/admin/reports/${id}/resolve`)
+      setList(list.map(r => r.id === id ? { ...r, status: 'resolved' } : r))
+    } catch (err) {
+      // keep UI optimistic
+    }
   }
+
+  if (loading) return <div className="text-center py-12 text-gray-500">Loading...</div>
+  if (error) return <div className="text-center py-12 text-red-600">{error}</div>
 
   return (
     <div className="space-y-4">

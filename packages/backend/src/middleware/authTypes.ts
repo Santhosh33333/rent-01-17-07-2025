@@ -3,8 +3,7 @@ import { Request } from "express";
 export interface AuthenticatedUser {
   userId: string;
   email: string;
-  isAdmin?: boolean;
-  adminRole?: "ADMIN" | "SUPER_ADMIN";
+  role?: "USER" | "WALKING_PARTNER" | "ADMIN" | "SUPER_ADMIN" | "MODERATOR" | "SUPPORT" | "FINANCE";
 }
 
 export interface AuthedRequest extends Request {

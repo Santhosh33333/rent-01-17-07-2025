@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { CheckCircle, XCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { api } from '../../lib/api'
 
 interface KycRequest {
   id: number
@@ -9,19 +10,37 @@ interface KycRequest {
   submittedAt: string
 }
 
-const requests: KycRequest[] = [
-  { id: 1, user: 'Alice Johnson', type: 'Government ID', submittedAt: '2025-01-15' },
-  { id: 2, user: 'Bob Smith', type: 'Address Proof', submittedAt: '2025-01-14' },
-  { id: 3, user: 'Carol White', type: 'Selfie', submittedAt: '2025-01-13' },
-]
-
 export function AdminKycPage() {
-  const [list, setList] = useState(requests)
+  const [list, setList] = useState<KycRequest[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleAction = (id: number, action: 'approve' | 'reject') => {
-    setList(list.filter(r => r.id !== id))
-    toast.success(`KYC request ${action}d`)
+  useEffect(() => {
+    const fetchRequests = async () => {
+      try {
+        const res = await api.get<KycRequest[]>('/admin/kyc-queue')
+        setList(res.data)
+      } catch (err) {
+        setError('Failed to load KYC queue')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchRequests()
+  }, [])
+
+  const handleAction = async (id: number, action: 'approve' | 'reject') => {
+    try {
+      await api.post(`/admin/kyc/${id}/${action}`)
+      setList(list.filter(r => r.id !== id))
+      toast.success(`KYC request ${action}d`)
+    } catch (err) {
+      toast.error('Action failed')
+    }
   }
+
+  if (loading) return <div className="text-center py-12 text-gray-500">Loading...</div>
+  if (error) return <div className="text-center py-12 text-red-600">{error}</div>
 
   return (
     <div className="space-y-4">

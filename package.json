@@ -2,5 +2,21 @@
   "name": "rentbuddy",
   "version": "1.0.0",
   "private": true,
-  "description": "RentBuddy - Trust-based social platform for real-world connections"
+  "description": "RentBuddy - Trust-based social platform for real-world connections",
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "scripts": {
+    "dev:backend": "cd packages/backend && npm run dev",
+    "dev:frontend": "cd packages/web && npm run dev",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "build": "cd packages/web && npm run build",
+    "build:backend": "cd packages/backend && npm run build",
+    "docker:up": "docker-compose up --build",
+    "docker:down": "docker-compose down",
+    "db:generate": "cd packages/backend && npx prisma generate",
+    "db:migrate": "cd packages/backend && npx prisma migrate dev",
+    "db:seed": "cd packages/backend && npm run prisma:seed",
+    "db:studio": "cd packages/backend && npx prisma studio"
+  }
 }

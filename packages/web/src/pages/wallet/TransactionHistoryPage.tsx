@@ -1,13 +1,37 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { api } from '../../lib/api'
 
-const transactions = [
-  { id: 1, type: 'credit', amount: 150.00, description: 'Walking request payment', date: '2025-01-15' },
-  { id: 2, type: 'debit', amount: 50.00, description: 'Withdrawal', date: '2025-01-14' },
-  { id: 3, type: 'credit', amount: 200.00, description: 'Community event reward', date: '2025-01-13' },
-]
+interface Transaction {
+  id: number
+  type: 'credit' | 'debit'
+  amount: number
+  description: string
+  date: string
+}
 
 export function TransactionHistoryPage() {
+  const [transactions, setTransactions] = useState<Transaction[]>([])
   const [filter, setFilter] = useState<'all' | 'credit' | 'debit'>('all')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      try {
+        const res = await api.get<Transaction[]>('/wallet/transactions')
+        setTransactions(res.data)
+      } catch (err) {
+        setError('Failed to load transactions')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchTransactions()
+  }, [])
+
+  if (loading) return <div className="text-center py-12 text-gray-500">Loading...</div>
+  if (error) return <div className="text-center py-12 text-red-600">{error}</div>
+
   const filtered = filter === 'all' ? transactions : transactions.filter(t => t.type === filter)
 
   return (

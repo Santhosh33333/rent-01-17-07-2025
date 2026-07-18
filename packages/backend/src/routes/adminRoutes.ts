@@ -1,35 +1,26 @@
 import { Router, Response, NextFunction } from "express";
 import { body } from "express-validator";
 import { authRateLimiter } from "../middleware/rateLimiter";
-import { authenticateToken, requireAdmin, requireSuperAdmin } from "../middleware/auth";
+import { authenticateToken, requireAdmin } from "../middleware/auth";
 import { sanitizeInput, validateRequest } from "../middleware/validation";
 import * as adminController from "../controllers/adminController";
-import { AuthedRequest } from "../middleware/authTypes";
+import { AuthedRequest, AuthenticatedUser } from "../middleware/authTypes";
 import { prisma } from "../config/database";
 import { sendError } from "../utils/response";
 
 async function authenticateAdmin(req: AuthedRequest, res: Response, next: NextFunction): Promise<void> {
   await authenticateToken(req, res, () => {});
   if (!req.user) return;
-  const admin = await prisma.admin.findUnique({ where: { id: req.user.userId }, select: { id: true, role: true } });
-  if (!admin) {
+  const user = await prisma.user.findUnique({ where: { id: req.user.userId }, select: { id: true, role: true } });
+  if (!user || !["SUPER_ADMIN", "ADMIN", "MODERATOR", "SUPPORT", "FINANCE"].includes(user.role)) {
     sendError(res, "Admin access required.", 403, "FORBIDDEN");
     return;
   }
-  req.user.isAdmin = true;
-  req.user.adminRole = admin.role;
+  req.user.role = user.role as AuthenticatedUser["role"];
   next();
 }
 
 const router = Router();
-
-router.post(
-  "/login",
-  authRateLimiter,
-  [body("email").isEmail().normalizeEmail(), body("password").notEmpty()],
-  validateRequest,
-  adminController.adminLogin
-);
 
 router.use(authenticateAdmin);
 

@@ -20,6 +20,7 @@ model User {
   city              String?
   country           String?
   status            String    @default("ACTIVE")
+  role              String    @default("USER")
   emailVerified     Boolean   @default(false)
   mobileVerified    Boolean   @default(false)
   lastLoginAt       DateTime?
@@ -59,6 +60,7 @@ model User {
   withdrawalRequests WithdrawalRequest[]
 
   @@index([status])
+  @@index([role])
   @@index([city])
 }
 
@@ -348,17 +350,6 @@ model SosAlert {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([status])
-}
-
-model Admin {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String
-  name         String
-  role         String   @default("ADMIN")
-  lastLoginAt  DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
 }
 
 model AuditLog {

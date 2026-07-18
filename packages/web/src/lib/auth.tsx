@@ -6,9 +6,9 @@ interface User {
   email: string
   name: string
   phone?: string
-  role: 'user' | 'admin' | 'walking_partner'
-  isVerified: boolean
-  trustScore: number
+  role?: 'user' | 'admin' | 'walking_partner'
+  isVerified?: boolean
+  trustScore?: number
 }
 
 interface AuthContextType {
@@ -37,18 +37,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const response = await api.post('/auth/login', { email, password })
-    const { token, user } = response.data
-    localStorage.setItem('token', token)
-    localStorage.setItem('user', JSON.stringify(user))
-    setUser(user)
+    const { accessToken, refreshToken, user } = response.data.data
+    localStorage.setItem('token', accessToken)
+    localStorage.setItem('refreshToken', refreshToken)
+    localStorage.setItem('user', JSON.stringify({ id: user.id, email: user.email, name: user.fullName }))
+    setUser({ id: user.id, email: user.email, name: user.fullName })
   }
 
   const register = async (data: any) => {
     const response = await api.post('/auth/register', data)
-    const { token, user } = response.data
-    localStorage.setItem('token', token)
-    localStorage.setItem('user', JSON.stringify(user))
-    setUser(user)
+    const { accessToken, refreshToken, user } = response.data.data
+    localStorage.setItem('token', accessToken)
+    localStorage.setItem('refreshToken', refreshToken)
+    localStorage.setItem('user', JSON.stringify({ id: user.id, email: user.email, name: user.fullName }))
+    setUser({ id: user.id, email: user.email, name: user.fullName })
   }
 
   const logout = () => {

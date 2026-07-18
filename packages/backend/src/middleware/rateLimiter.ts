@@ -16,8 +16,8 @@ export const generalRateLimiter = rateLimit({
 });
 
 export const authRateLimiter = rateLimit({
-  windowMs: env.RATE_LIMIT_WINDOW_MS,
-  max: env.AUTH_RATE_LIMIT_MAX,
+  windowMs: env.NODE_ENV === "development" ? 60000 : env.RATE_LIMIT_WINDOW_MS,
+  max: env.NODE_ENV === "development" ? 1000 : env.AUTH_RATE_LIMIT_MAX,
   standardHeaders,
   legacyHeaders,
   handler: (_req, res) => {

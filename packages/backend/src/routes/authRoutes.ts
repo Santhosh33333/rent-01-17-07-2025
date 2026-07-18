@@ -25,7 +25,7 @@ router.post(
 router.post(
   "/login",
   authRateLimiter,
-  [body("identifier").notEmpty().withMessage("Email or phone is required"), body("password").notEmpty().withMessage("Password is required")],
+  [body("email").isEmail().withMessage("Valid email is required"), body("password").notEmpty().withMessage("Password is required")],
   validateRequest,
   authController.login
 );
@@ -74,6 +74,13 @@ router.post(
   [body("userId").notEmpty(), body("channel").isIn(["email", "mobile"])],
   validateRequest,
   authController.resendOTP
+);
+
+router.post(
+  "/verify-password",
+  [body("email").isEmail().normalizeEmail(), body("password").notEmpty()],
+  validateRequest,
+  authController.verifyPassword
 );
 
 export default router;

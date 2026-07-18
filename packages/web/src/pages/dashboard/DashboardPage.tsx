@@ -1,15 +1,41 @@
+import { useState, useEffect } from 'react'
 import { Users, Calendar, MessageSquare } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
+import { api } from '../../lib/api'
 import { StatCard } from '../../components/StatCard'
+
+interface ProfileData {
+  trustScore: number
+}
 
 export function DashboardPage() {
   const { user } = useAuth()
+  const [profile, setProfile] = useState<ProfileData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const profileRes = await api.get<ProfileData>('/users/profile')
+        setProfile(profileRes.data)
+      } catch (err) {
+        setError('Failed to load dashboard data')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [])
+
+  if (loading) return <div className="text-center py-12 text-gray-500">Loading...</div>
+  if (error) return <div className="text-center py-12 text-red-600">{error}</div>
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Trust Score" value={user?.trustScore || 0} icon={<Users className="h-6 w-6 text-blue-600" />} />
+        <StatCard title="Trust Score" value={profile?.trustScore ?? user?.trustScore ?? 0} icon={<Users className="h-6 w-6 text-blue-600" />} />
         <StatCard title="Communities" value="12" icon={<Users className="h-6 w-6 text-green-600" />} change="+2 this month" changeType="positive" />
         <StatCard title="Events" value="8" icon={<Calendar className="h-6 w-6 text-purple-600" />} />
         <StatCard title="Messages" value="24" icon={<MessageSquare className="h-6 w-6 text-yellow-600" />} />

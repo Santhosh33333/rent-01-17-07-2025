@@ -112,7 +112,7 @@ export async function login(req: Request, res: Response): Promise<void> {
     });
     await recordLogin(user.id, req);
 
-    sendSuccess(res, { accessToken, refreshToken, user: { id: user.id, email: user.email, fullName: user.fullName } }, "Login successful.");
+    sendSuccess(res, { accessToken, refreshToken, user: { id: user.id, email: user.email, fullName: user.fullName, role: user.role } }, "Login successful.");
   } catch (err) {
     sendError(res, "Login failed.", 500, "INTERNAL_ERROR");
   }
@@ -269,5 +269,26 @@ export async function resendOTP(req: Request, res: Response): Promise<void> {
     sendSuccess(res, undefined, `OTP resent to ${channel}.`);
   } catch (err) {
     sendError(res, "Failed to resend OTP.", 500, "INTERNAL_ERROR");
+  }
+}
+
+export async function verifyPassword(req: Request, res: Response): Promise<void> {
+  try {
+    const { email, password } = req.body;
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      sendError(res, "Invalid credentials.", 401, "INVALID_CREDENTIALS");
+      return;
+    }
+    const match = await bcrypt.compare(password, user.passwordHash);
+    if (!match) {
+      sendError(res, "Invalid credentials.", 401, "INVALID_CREDENTIALS");
+      return;
+    }
+    const accessToken = generateAccessToken({ userId: user.id, email: user.email });
+    const refreshToken = generateRefreshToken(user.id);
+    sendSuccess(res, { accessToken, refreshToken, user: { id: user.id, email: user.email, fullName: user.fullName, role: user.role } }, "Password verified.");
+  } catch (err) {
+    sendError(res, "Password verification failed.", 500, "INTERNAL_ERROR");
   }
 }

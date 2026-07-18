@@ -1,6 +1,8 @@
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Calendar } from 'lucide-react'
 import { format } from 'date-fns'
+import { api } from '../../lib/api'
 
 interface Event {
   id: number
@@ -10,13 +12,28 @@ interface Event {
   rsvp: boolean
 }
 
-const events: Event[] = [
-  { id: 1, name: 'Morning Dog Walk', date: '2025-01-20T08:00:00', location: 'Central Park', rsvp: false },
-  { id: 2, name: 'Community Meetup', date: '2025-01-25T14:00:00', location: 'Downtown Community Center', rsvp: true },
-  { id: 3, name: 'Pet Parade', date: '2025-02-01T10:00:00', location: 'Riverside', rsvp: false },
-]
-
 export function EventsPage() {
+  const [events, setEvents] = useState<Event[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        const res = await api.get<Event[]>('/events')
+        setEvents(res.data)
+      } catch (err) {
+        setError('Failed to load events')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchEvents()
+  }, [])
+
+  if (loading) return <div className="text-center py-12 text-gray-500">Loading...</div>
+  if (error) return <div className="text-center py-12 text-red-600">{error}</div>
+
   return (
     <div className="space-y-4">
       <div className="grid gap-4">

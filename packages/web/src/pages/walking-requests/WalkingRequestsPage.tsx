@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
+import { api } from '../../lib/api'
 
 interface Request {
   id: number
@@ -11,14 +12,29 @@ interface Request {
   reward: number
 }
 
-const requests: Request[] = [
-  { id: 1, type: 'walking', location: 'Central Park', date: '2025-01-20', status: 'open', reward: 25.00 },
-  { id: 2, type: 'companionship', location: 'Downtown Mall', date: '2025-01-21', status: 'accepted', reward: 30.00 },
-  { id: 3, type: 'walking', location: 'Riverside', date: '2025-01-19', status: 'completed', reward: 20.00 },
-]
-
 export function WalkingRequestsPage() {
+  const [requests, setRequests] = useState<Request[]>([])
   const [filter, setFilter] = useState<'all' | 'open' | 'accepted' | 'completed'>('all')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchRequests = async () => {
+      try {
+        const res = await api.get<Request[]>('/walking-requests')
+        setRequests(res.data)
+      } catch (err) {
+        setError('Failed to load walking requests')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchRequests()
+  }, [])
+
+  if (loading) return <div className="text-center py-12 text-gray-500">Loading...</div>
+  if (error) return <div className="text-center py-12 text-red-600">{error}</div>
+
   const filtered = filter === 'all' ? requests : requests.filter(r => r.status === filter)
 
   return (

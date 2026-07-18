@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useAuth } from '../../lib/auth'
+import { Link } from 'react-router-dom'
 import { VerificationBadge } from '../../components/VerificationBadge'
 import { TrustScoreDisplay } from '../../components/TrustScoreDisplay'
 import toast from 'react-hot-toast'
@@ -22,6 +23,9 @@ export function ProfilePage() {
     setEditing(false)
     toast.success('Profile updated successfully')
   }
+
+  const adminRoles = ["SUPER_ADMIN", "ADMIN", "MODERATOR", "SUPPORT", "FINANCE"]
+  const isAdmin = user?.role && adminRoles.includes(user.role)
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -53,6 +57,15 @@ export function ProfilePage() {
           )}
         </form>
       </div>
+
+      {isAdmin && (
+        <div className="card p-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Admin Access</h3>
+          <p className="text-sm text-gray-600 mb-4">You have administrative privileges. Access the admin portal below.</p>
+          <Link to="/admin/portal" className="btn-primary">Admin Portal</Link>
+        </div>
+      )}
+
       <div className="card p-6">
         <h3 className="text-lg font-medium text-gray-900 mb-4">Verification Status</h3>
         <div className="space-y-3">

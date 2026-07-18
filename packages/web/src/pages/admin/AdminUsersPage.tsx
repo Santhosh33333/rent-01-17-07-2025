@@ -1,23 +1,46 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Search } from 'lucide-react'
+import { api } from '../../lib/api'
 
 interface User {
-  id: number
-  name: string
+  id: string
+  fullName: string
   email: string
+  phone: string
+  status: string
   role: string
-  status: 'active' | 'suspended'
+  createdAt: string
 }
 
-const users: User[] = [
-  { id: 1, name: 'Alice Johnson', email: 'alice@example.com', role: 'user', status: 'active' },
-  { id: 2, name: 'Bob Smith', email: 'bob@example.com', role: 'walking_partner', status: 'active' },
-  { id: 3, name: 'Carol White', email: 'carol@example.com', role: 'user', status: 'suspended' },
-]
-
 export function AdminUsersPage() {
+  const [users, setUsers] = useState<User[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const filtered = users.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()))
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const response = await api.get('/admin/users')
+        const result = response.data
+        if (result.success) {
+          setUsers(result.data.items)
+        } else {
+          setError(result.error || 'Failed to fetch users')
+        }
+      } catch (err: any) {
+        setError(err?.response?.data?.error || 'Failed to fetch users')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchUsers()
+  }, [])
+
+  const filtered = users.filter(u => u.fullName.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()))
+
+  if (loading) return <div className="text-center py-8">Loading...</div>
+  if (error) return <div className="text-center py-8 text-red-600">{error}</div>
 
   return (
     <div className="space-y-4">
@@ -48,18 +71,23 @@ export function AdminUsersPage() {
           <tbody className="bg-white divide-y divide-gray-200">
             {filtered.map(user => (
               <tr key={user.id}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.name}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.fullName}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.email}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">{user.role.replace('_', ' ')}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">{user.role.toLowerCase().replace('_', ' ')}</td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    user.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    user.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                   }`}>
-                    {user.status}
+                    {user.status.toLowerCase()}
                   </span>
                 </td>
               </tr>
             ))}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500">No users found</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

@@ -1,10 +1,9 @@
 import { useState } from 'react'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import toast from 'react-hot-toast'
-import { useAuth } from '../../lib/auth'
+import { api } from '../../lib/api'
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -14,10 +13,9 @@ const loginSchema = z.object({
 type LoginForm = z.infer<typeof loginSchema>
 
 export function LoginPage() {
-  const { login } = useAuth()
   const navigate = useNavigate()
-  const location = useLocation()
   const [loading, setLoading] = useState(false)
+  const [apiError, setApiError] = useState<string | null>(null)
 
   const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
@@ -26,12 +24,28 @@ export function LoginPage() {
   const onSubmit = async (data: LoginForm) => {
     try {
       setLoading(true)
-      await login(data.email, data.password)
-      toast.success('Login successful!')
-      const from = location.state?.from?.pathname || '/dashboard'
-      navigate(from, { replace: true })
-    } catch {
-      toast.error('Invalid credentials')
+      setApiError(null)
+      const response = await api.post('/auth/login', {
+        email: data.email,
+        password: data.password,
+      })
+      const result = response.data
+      if (!result.success) {
+        setApiError(result.error || 'Invalid credentials')
+        return
+      }
+      const { accessToken, refreshToken, user } = result.data
+      localStorage.setItem('token', accessToken)
+      localStorage.setItem('refreshToken', refreshToken)
+      localStorage.setItem('user', JSON.stringify({
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+      }))
+      navigate('/dashboard', { replace: true })
+    } catch (err: any) {
+      setApiError(err?.response?.data?.error || err?.message || 'Login failed')
     } finally {
       setLoading(false)
     }
@@ -51,6 +65,7 @@ export function LoginPage() {
             </Link>
           </p>
         </div>
+
         <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
@@ -74,6 +89,13 @@ export function LoginPage() {
               {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>}
             </div>
           </div>
+
+          {apiError && (
+            <div className="rounded-md bg-red-50 p-3">
+              <p className="text-sm text-red-700">{apiError}</p>
+            </div>
+          )}
+
           <button type="submit" disabled={loading} className="btn-primary w-full">
             {loading ? 'Signing in...' : 'Sign in'}
           </button>

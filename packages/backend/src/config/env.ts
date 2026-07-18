@@ -24,6 +24,7 @@ const envSchema = z.object({
 
   ADMIN_EMAIL: z.string().optional(),
   ADMIN_PASSWORD: z.string().optional(),
+  ADMIN_NAME: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

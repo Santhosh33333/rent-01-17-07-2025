@@ -1,32 +1,7 @@
 import { Request, Response } from "express";
-import bcrypt from "bcryptjs";
 import { prisma } from "../config/database";
-import { env } from "../config/env";
-import { generateAccessToken, generateRefreshToken } from "../utils/jwt";
 import { sendSuccess, sendError } from "../utils/response";
 import { AuthedRequest } from "../middleware/authTypes";
-
-export async function adminLogin(req: Request, res: Response): Promise<void> {
-  try {
-    const { email, password } = req.body;
-    const admin = await prisma.admin.findUnique({ where: { email } });
-    if (!admin) {
-      sendError(res, "Invalid admin credentials.", 401, "INVALID_CREDENTIALS");
-      return;
-    }
-    const match = await bcrypt.compare(password, admin.passwordHash);
-    if (!match) {
-      sendError(res, "Invalid admin credentials.", 401, "INVALID_CREDENTIALS");
-      return;
-    }
-    await prisma.admin.update({ where: { id: admin.id }, data: { lastLoginAt: new Date() } });
-    const accessToken = generateAccessToken({ userId: admin.id, email: admin.email });
-    const refreshToken = generateRefreshToken(admin.id);
-    sendSuccess(res, { accessToken, refreshToken, admin: { id: admin.id, email: admin.email, role: admin.role } }, "Admin login successful.");
-  } catch (err) {
-    sendError(res, "Admin login failed.", 500, "INTERNAL_ERROR");
-  }
-}
 
 export async function getDashboardStats(_req: AuthedRequest, res: Response): Promise<void> {
   try {

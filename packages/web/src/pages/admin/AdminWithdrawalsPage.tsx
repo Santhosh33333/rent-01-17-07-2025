@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { CheckCircle, XCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { api } from '../../lib/api'
 
 interface Withdrawal {
   id: number
@@ -10,19 +11,37 @@ interface Withdrawal {
   date: string
 }
 
-const withdrawals: Withdrawal[] = [
-  { id: 1, user: 'Alice Johnson', amount: 250.00, status: 'pending', date: '2025-01-15' },
-  { id: 2, user: 'Bob Smith', amount: 100.00, status: 'pending', date: '2025-01-14' },
-  { id: 3, user: 'Carol White', amount: 500.00, status: 'pending', date: '2025-01-13' },
-]
-
 export function AdminWithdrawalsPage() {
-  const [list, setList] = useState(withdrawals)
+  const [list, setList] = useState<Withdrawal[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleAction = (id: number, action: 'approve' | 'reject') => {
-    setList(list.map(w => w.id === id ? { ...w, status: action === 'approve' ? 'approved' : 'rejected' } : w))
-    toast.success(`Withdrawal ${action}d`)
+  useEffect(() => {
+    const fetchWithdrawals = async () => {
+      try {
+        const res = await api.get<Withdrawal[]>('/admin/withdrawals')
+        setList(res.data)
+      } catch (err) {
+        setError('Failed to load withdrawals')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchWithdrawals()
+  }, [])
+
+  const handleAction = async (id: number, action: 'approve' | 'reject') => {
+    try {
+      await api.post(`/admin/withdrawals/${id}/${action}`)
+      setList(list.map(w => w.id === id ? { ...w, status: action === 'approve' ? 'approved' : 'rejected' } : w))
+      toast.success(`Withdrawal ${action}d`)
+    } catch (err) {
+      toast.error('Action failed')
+    }
   }
+
+  if (loading) return <div className="text-center py-12 text-gray-500">Loading...</div>
+  if (error) return <div className="text-center py-12 text-red-600">{error}</div>
 
   return (
     <div className="space-y-4">

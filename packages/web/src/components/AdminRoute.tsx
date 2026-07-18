@@ -1,24 +1,25 @@
 import { Navigate, useLocation } from 'react-router-dom'
-import { useAuth } from '../lib/auth'
 
 interface AdminRouteProps {
   children: React.ReactNode
 }
 
 export function AdminRoute({ children }: AdminRouteProps) {
-  const { user, loading } = useAuth()
+  const userStr = localStorage.getItem('user')
   const location = useLocation()
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    )
+  if (!userStr) {
+    return <Navigate to="/login" state={{ from: location }} replace />
   }
 
-  if (!user || user.role !== 'admin') {
-    return <Navigate to="/admin/login" state={{ from: location }} replace />
+  try {
+    const user = JSON.parse(userStr)
+    const adminRoles = ["SUPER_ADMIN", "ADMIN", "MODERATOR", "SUPPORT", "FINANCE"]
+    if (!adminRoles.includes(user.role)) {
+      return <Navigate to="/dashboard" state={{ from: location }} replace />
+    }
+  } catch {
+    return <Navigate to="/login" state={{ from: location }} replace />
   }
 
   return <>{children}</>
