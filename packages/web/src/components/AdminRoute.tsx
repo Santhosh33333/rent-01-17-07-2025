@@ -1,7 +1,7 @@
-import { Navigate, useLocation } from 'react-router-dom'
+import { Navigate, useLocation, Outlet } from 'react-router-dom'
 
 interface AdminRouteProps {
-  children: React.ReactNode
+  children?: React.ReactNode
 }
 
 export function AdminRoute({ children }: AdminRouteProps) {
@@ -22,5 +22,5 @@ export function AdminRoute({ children }: AdminRouteProps) {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
-  return <>{children}</>
+  return children ? <>{children}</> : <Outlet />
 }

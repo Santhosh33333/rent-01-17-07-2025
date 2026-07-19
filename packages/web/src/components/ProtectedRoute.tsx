@@ -1,8 +1,8 @@
-import { Navigate, useLocation } from 'react-router-dom'
+import { Navigate, useLocation, Outlet } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 
 interface ProtectedRouteProps {
-  children: React.ReactNode
+  children?: React.ReactNode
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
@@ -11,8 +11,11 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-surface-50 dark:bg-surface-950">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 rounded-full border-2 border-primary-200 dark:border-primary-800 border-t-primary-500 animate-spin" />
+          <p className="text-sm text-surface-500 animate-pulse">Loading...</p>
+        </div>
       </div>
     )
   }
@@ -21,5 +24,5 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
-  return <>{children}</>
+  return children ? <>{children}</> : <Outlet />
 }

@@ -3,6 +3,7 @@ import { AuthProvider } from './lib/auth'
 import { Toaster } from 'react-hot-toast'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AdminRoute } from './components/AdminRoute'
+import { Layout } from './components/Layout'
 
 import { LoginPage } from './pages/auth/LoginPage'
 import { RegisterPage } from './pages/auth/RegisterPage'
@@ -41,40 +42,56 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <Toaster position="top-right" />
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            className: 'glass-card-sm !px-4 !py-3 !text-sm',
+            duration: 4000,
+          }}
+        />
         <Routes>
+          {/* Auth routes - no layout */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/verify-mobile" element={<VerifyMobilePage />} />
-          <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-          <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-          <Route path="/verification" element={<ProtectedRoute><VerificationPage /></ProtectedRoute>} />
-          <Route path="/verification/selfie" element={<ProtectedRoute><VerifySelfiePage /></ProtectedRoute>} />
-          <Route path="/verification/gov-id" element={<ProtectedRoute><VerifyGovIdPage /></ProtectedRoute>} />
-          <Route path="/verification/address" element={<ProtectedRoute><VerifyAddressPage /></ProtectedRoute>} />
-          <Route path="/wallet" element={<ProtectedRoute><WalletPage /></ProtectedRoute>} />
-          <Route path="/wallet/withdraw" element={<ProtectedRoute><WithdrawalPage /></ProtectedRoute>} />
-          <Route path="/wallet/history" element={<ProtectedRoute><TransactionHistoryPage /></ProtectedRoute>} />
-          <Route path="/walking-requests" element={<ProtectedRoute><WalkingRequestsPage /></ProtectedRoute>} />
-          <Route path="/walking-requests/create" element={<ProtectedRoute><CreateWalkingRequestPage /></ProtectedRoute>} />
-          <Route path="/walking-requests/:id" element={<ProtectedRoute><WalkingRequestDetailPage /></ProtectedRoute>} />
-          <Route path="/communities" element={<ProtectedRoute><CommunitiesPage /></ProtectedRoute>} />
-          <Route path="/communities/:id" element={<ProtectedRoute><CommunityDetailPage /></ProtectedRoute>} />
-          <Route path="/events" element={<ProtectedRoute><EventsPage /></ProtectedRoute>} />
-          <Route path="/events/:id" element={<ProtectedRoute><EventDetailPage /></ProtectedRoute>} />
-          <Route path="/messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
-          <Route path="/messages/:userId" element={<ProtectedRoute><ConversationPage /></ProtectedRoute>} />
-          <Route path="/walking-partner/apply" element={<ProtectedRoute><ApplyPage /></ProtectedRoute>} />
-          <Route path="/walking-partner/status" element={<ProtectedRoute><StatusPage /></ProtectedRoute>} />
-          <Route path="/admin/portal" element={<ProtectedRoute><AdminPortalPage /></ProtectedRoute>} />
-          <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
-          <Route path="/admin/users" element={<AdminRoute><AdminUsersPage /></AdminRoute>} />
-          <Route path="/admin/kyc" element={<AdminRoute><AdminKycPage /></AdminRoute>} />
-          <Route path="/admin/withdrawals" element={<AdminRoute><AdminWithdrawalsPage /></AdminRoute>} />
-          <Route path="/admin/reports" element={<AdminRoute><AdminReportsPage /></AdminRoute>} />
-          <Route path="/admin/audit-logs" element={<AdminRoute><AdminAuditLogsPage /></AdminRoute>} />
-          <Route path="/admin/walking-partners" element={<AdminRoute><AdminWalkingPartnersPage /></AdminRoute>} />
+
+          {/* App routes - with layout */}
+          <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/verification" element={<VerificationPage />} />
+            <Route path="/verification/selfie" element={<VerifySelfiePage />} />
+            <Route path="/verification/gov-id" element={<VerifyGovIdPage />} />
+            <Route path="/verification/address" element={<VerifyAddressPage />} />
+            <Route path="/wallet" element={<WalletPage />} />
+            <Route path="/wallet/withdraw" element={<WithdrawalPage />} />
+            <Route path="/wallet/history" element={<TransactionHistoryPage />} />
+            <Route path="/walking-requests" element={<WalkingRequestsPage />} />
+            <Route path="/walking-requests/create" element={<CreateWalkingRequestPage />} />
+            <Route path="/walking-requests/:id" element={<WalkingRequestDetailPage />} />
+            <Route path="/communities" element={<CommunitiesPage />} />
+            <Route path="/communities/:id" element={<CommunityDetailPage />} />
+            <Route path="/events" element={<EventsPage />} />
+            <Route path="/events/:id" element={<EventDetailPage />} />
+            <Route path="/messages" element={<MessagesPage />} />
+            <Route path="/messages/:userId" element={<ConversationPage />} />
+            <Route path="/walking-partner/apply" element={<ApplyPage />} />
+            <Route path="/walking-partner/status" element={<StatusPage />} />
+            <Route path="/admin/portal" element={<AdminPortalPage />} />
+          </Route>
+
+          {/* Admin routes - with layout + admin guard */}
+          <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+            <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
+            <Route path="/admin/users" element={<AdminRoute><AdminUsersPage /></AdminRoute>} />
+            <Route path="/admin/kyc" element={<AdminRoute><AdminKycPage /></AdminRoute>} />
+            <Route path="/admin/withdrawals" element={<AdminRoute><AdminWithdrawalsPage /></AdminRoute>} />
+            <Route path="/admin/reports" element={<AdminRoute><AdminReportsPage /></AdminRoute>} />
+            <Route path="/admin/audit-logs" element={<AdminRoute><AdminAuditLogsPage /></AdminRoute>} />
+            <Route path="/admin/walking-partners" element={<AdminRoute><AdminWalkingPartnersPage /></AdminRoute>} />
+          </Route>
+
           <Route path="/" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>
