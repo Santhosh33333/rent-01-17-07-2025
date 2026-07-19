@@ -58,6 +58,7 @@ model User {
   locationShares    LocationShare[]
   auditLogs         AuditLog[]
   withdrawalRequests WithdrawalRequest[]
+  adminProfile       AdminUser?
 
   @@index([status])
   @@index([role])
@@ -472,4 +473,350 @@ model Referral {
   referred     User     @relation("ReferredBy", fields: [referredId], references: [id], onDelete: Cascade)
 
   @@index([referrerId])
+}
+
+// ============================================================
+// ADMIN CONSOLE 2026 - EXTENDED MODELS
+// ============================================================
+
+model AdminRole {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  displayName String
+  description String?
+  permissions String   // JSON array of permission keys
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  admins      AdminUser[]
+}
+
+model AdminUser {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  roleId          String
+  department      String?
+  twoFactorEnabled Boolean @default(false)
+  twoFactorSecret String?
+  lastActiveAt    DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role            AdminRole @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  sessions        AdminSession[]
+  loginAttempts   AdminLoginAttempt[]
+  notifications   AdminNotification[]
+
+  @@index([roleId])
+}
+
+model AdminSession {
+  id           String   @id @default(uuid())
+  adminUserId  String
+  sessionToken String   @unique
+  ipAddress    String?
+  userAgent    String?
+  location     String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  revokedAt    DateTime?
+
+  adminUser    AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId])
+}
+
+model AdminLoginAttempt {
+  id           String   @id @default(uuid())
+  adminUserId  String?
+  email        String
+  ipAddress    String?
+  userAgent    String?
+  success      Boolean
+  failureReason String?
+  createdAt    DateTime @default(now())
+
+  adminUser    AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: SetNull)
+
+  @@index([email])
+  @@index([createdAt])
+}
+
+model AdminNotification {
+  id          String   @id @default(uuid())
+  adminUserId String
+  type        String
+  title       String
+  body        String
+  link        String?
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId, isRead])
+}
+
+model NotificationTemplate {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  title       String
+  body        String
+  category    String
+  variables   String?  // JSON array of variable names
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model BroadcastCampaign {
+  id            String   @id @default(uuid())
+  name          String
+  channel       String   // PUSH, EMAIL, SMS, IN_APP
+  audience      String   // JSON filter criteria
+  title         String
+  body          String
+  status        String   @default("DRAFT") // DRAFT, SCHEDULED, SENDING, SENT, CANCELLED
+  scheduledAt   DateTime?
+  sentAt        DateTime?
+  totalTargeted Int      @default(0)
+  totalSent     Int      @default(0)
+  totalDelivered Int     @default(0)
+  totalOpened   Int      @default(0)
+  totalClicked  Int      @default(0)
+  createdBy     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Banner {
+  id          String   @id @default(uuid())
+  title       String
+  subtitle    String?
+  imageUrl    String
+  linkUrl     String?
+  position    String   @default("HOME_TOP") // HOME_TOP, HOME_MID, WALKS, COMMUNITIES, EVENTS
+  targetAudience String @default("ALL") // ALL, USERS, PARTNERS, NEW_USERS
+  isActive    Boolean  @default(true)
+  startDate   DateTime?
+  endDate     DateTime?
+  priority    Int      @default(0)
+  clicks      Int      @default(0)
+  impressions Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AppSettings {
+  id              String   @id @default(uuid())
+  key             String   @unique
+  value           String
+  category        String
+  description     String?
+  dataType        String   @default("STRING") // STRING, NUMBER, BOOLEAN, JSON
+  isPublic        Boolean  @default(false)
+  updatedBy       String?
+  updatedAt       DateTime @updatedAt
+}
+
+model FeatureFlag {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  name        String
+  description String?
+  isEnabled   Boolean  @default(false)
+  rolloutPercentage Int @default(0)
+  targetRoles String?  // JSON array of roles
+  targetCities String? // JSON array of cities
+  updatedBy   String?
+  updatedAt   DateTime @updatedAt
+}
+
+model ContentArticle {
+  id          String   @id @default(uuid())
+  type        String   // FAQ, HELP, TERMS, PRIVACY, POLICY, ANNOUNCEMENT
+  title       String
+  slug        String   @unique
+  body        String
+  excerpt     String?
+  tags        String?  // JSON array
+  isPublished Boolean  @default(false)
+  authorId    String?
+  viewCount   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([type])
+  @@index([isPublished])
+}
+
+model SystemMetric {
+  id          String   @id @default(uuid())
+  metric      String
+  value       Float
+  tags        String?  // JSON
+  recordedAt  DateTime @default(now())
+
+  @@index([metric, recordedAt])
+}
+
+model ApiLog {
+  id          String   @id @default(uuid())
+  method      String
+  path        String
+  statusCode  Int
+  durationMs  Int
+  ipAddress   String?
+  userAgent   String?
+  userId      String?
+  errorMessage String?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([statusCode])
+}
+
+model ErrorLog {
+  id          String   @id @default(uuid())
+  level       String   // ERROR, WARN, INFO
+  message     String
+  stack       String?
+  context     String?  // JSON
+  userId      String?
+  createdAt   DateTime @default(now())
+
+  @@index([level])
+  @@index([createdAt])
+}
+
+model BackupRecord {
+  id          String   @id @default(uuid())
+  filename    String
+  sizeBytes   Int
+  type        String   // FULL, INCREMENTAL
+  status      String   @default("COMPLETED") // RUNNING, COMPLETED, FAILED
+  triggeredBy String?
+  notes       String?
+  createdAt   DateTime @default(now())
+}
+
+model AdminNote {
+  id          String   @id @default(uuid())
+  targetType  String   // USER, PARTNER, REPORT, KYC, WITHDRAWAL
+  targetId    String
+  authorId    String
+  content     String
+  isInternal  Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([targetType, targetId])
+}
+
+model UserActivity {
+  id          String   @id @default(uuid())
+  userId      String
+  action      String
+  entityType  String?
+  entityId    String?
+  metadata    String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model CommissionRule {
+  id          String   @id @default(uuid())
+  name        String
+  type        String   // PERCENTAGE, FIXED
+  value       Float
+  appliesTo   String   // WALKS, CARRYBUDDY, REFERRAL, ALL
+  minAmount   Float?
+  maxAmount   Float?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model RewardRule {
+  id          String   @id @default(uuid())
+  name        String
+  trigger     String   // SIGNUP, FIRST_WALK, REFERRAL, KYC_COMPLETE
+  rewardType  String   // WALLET_CREDIT, BADGE, POINTS
+  rewardValue Float
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SosIncident {
+  id          String   @id @default(uuid())
+  userId      String
+  latitude    Float?
+  longitude   Float?
+  address     String?
+  message     String?
+  severity    String   @default("HIGH") // LOW, MEDIUM, HIGH, CRITICAL
+  status      String   @default("ACTIVE") // ACTIVE, RESPONDING, RESOLVED, FALSE_ALARM
+  respondedBy String?
+  respondedAt DateTime?
+  resolvedAt  DateTime?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ChatReport {
+  id          String   @id @default(uuid())
+  reporterId  String
+  messageId   String?
+  conversationId String?
+  reason      String
+  description String?
+  status      String   @default("PENDING") // PENDING, REVIEWED, ACTIONED, DISMISSED
+  reviewedBy  String?
+  reviewedAt  DateTime?
+  createdAt   DateTime @default(now())
+}
+
+model BlocklistEntry {
+  id          String   @id @default(uuid())
+  type        String   // EMAIL, PHONE, IP, DEVICE, USER_ID
+  value       String
+  reason      String?
+  addedBy     String?
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  @@unique([type, value])
+}
+
+model MaintenanceWindow {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  startAt     DateTime
+  endAt       DateTime
+  affectedServices String  // JSON array
+  isActive    Boolean  @default(false)
+  createdBy   String?
+  createdAt   DateTime @default(now())
+}
+
+model AppVersion {
+  id          String   @id @default(uuid())
+  platform    String   // ANDROID, IOS, WEB
+  version     String
+  buildNumber Int
+  isForceUpdate Boolean @default(false)
+  releaseNotes String?
+  isActive    Boolean  @default(true)
+  releasedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
 }
