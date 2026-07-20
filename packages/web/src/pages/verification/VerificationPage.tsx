@@ -1,18 +1,39 @@
 import { useState, useEffect } from 'react'
-import { CheckCircle, Clock, XCircle } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import {
+  Shield, Mail, Smartphone, Camera, CreditCard, MapPin,
+  CheckCircle, Clock, AlertTriangle, Sparkles,
+  ArrowRight, UserCheck, RefreshCw
+} from 'lucide-react'
 import { api } from '../../lib/api'
-import toast from 'react-hot-toast'
+import { AnimatedPage } from '../../components/AnimatedPage'
+import { GlassCard } from '../../components/GlassCard'
+import { PageHeader } from '../../components/PageHeader'
+import { EmptyState } from '../../components/EmptyState'
 
 interface Step {
   name: string
-  status: 'verified' | 'pending' | 'not-started'
+  status: 'verified' | 'pending' | 'not-started' | 'rejected'
   link?: string
+  icon: typeof Shield
+  description: string
+  rejectionReason?: string
+}
+
+const stepMeta: Record<string, { icon: typeof Shield; description: string }> = {
+  'Email Verification': { icon: Mail, description: 'Verify your email address to secure your account' },
+  'Mobile Verification': { icon: Smartphone, description: 'Confirm your phone number for SMS notifications' },
+  'Selfie Verification': { icon: Camera, description: 'Upload a selfie to match your ID photo' },
+  'Government ID': { icon: CreditCard, description: 'Submit a valid government-issued ID' },
+  'Address Proof': { icon: MapPin, description: 'Provide proof of your current address' },
 }
 
 export function VerificationPage() {
   const [steps, setSteps] = useState<Step[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [overallStatus, setOverallStatus] = useState<string>('UNVERIFIED')
+  const [rejectionReason, setRejectionReason] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchVerificationStatus = async () => {
@@ -21,14 +42,18 @@ export function VerificationPage() {
         const result = response.data
         if (result.success) {
           const data = result.data
-          const mappedSteps: Step[] = [
-            { name: 'Email Verification', status: data.emailVerified ? 'verified' : 'not-started' },
-            { name: 'Mobile Verification', status: data.mobileVerified ? 'verified' : 'not-started' },
-            { name: 'Selfie Verification', status: data.selfieUrl ? 'pending' : 'not-started', link: '/verification/selfie' },
-            { name: 'Government ID', status: data.govIdUrl ? 'pending' : 'not-started', link: '/verification/gov-id' },
-            { name: 'Address Proof', status: data.addressProofUrl ? 'pending' : 'not-started', link: '/verification/address' },
-          ]
-          setSteps(mappedSteps)
+          const status = data.status || 'UNVERIFIED'
+          setOverallStatus(status)
+          setRejectionReason(data.rejectionReason || null)
+          setSteps([
+            { name: 'Personal Details', status: data.personalDetails ? 'verified' : 'not-started', link: '/verification/step1', ...stepMeta['Personal Details'] },
+            { name: 'Government ID', status: data.govId ? 'verified' : 'not-started', link: '/verification/step2', ...stepMeta['Government ID'] },
+            { name: 'Selfie Verification', status: data.selfie ? 'verified' : 'not-started', link: '/verification/step3', ...stepMeta['Selfie Verification'], rejectionReason: status === 'REJECTED' ? data.rejectionReason : undefined },
+            { name: 'Address Proof', status: data.addressProof ? 'verified' : 'not-started', link: '/verification/step4', ...stepMeta['Address Proof'], rejectionReason: status === 'REJECTED' ? data.rejectionReason : undefined },
+            { name: 'Emergency Contact', status: data.emergencyContact ? 'verified' : 'not-started', link: '/verification/step5', ...stepMeta['Emergency Contact'] },
+            { name: 'Review & Submit', status: (data.personalDetails && data.govId && data.selfie && data.addressProof && data.emergencyContact) ? 'pending' : 'not-started', link: '/verification/step6', ...stepMeta['Address Proof'] },
+            { name: 'Admin Verification', status: status === 'APPROVED' ? 'verified' : status === 'REJECTED' ? 'rejected' : 'pending', ...stepMeta['Address Proof'] },
+          ])
         } else {
           setError(result.error || 'Failed to fetch verification status')
         }
@@ -41,41 +66,137 @@ export function VerificationPage() {
     fetchVerificationStatus()
   }, [])
 
-  const getIcon = (status: string) => {
-    switch (status) {
-      case 'verified': return <CheckCircle className="h-6 w-6 text-green-600" />
-      case 'pending': return <Clock className="h-6 w-6 text-yellow-600" />
-      default: return <XCircle className="h-6 w-6 text-gray-400" />
-    }
+  const verifiedCount = steps.filter(s => s.status === 'verified').length
+  const progress = steps.length > 0 ? (verifiedCount / steps.length) * 100 : 0
+
+  const statusConfig = {
+    'verified': { icon: CheckCircle, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-500/10', badge: 'badge-success', label: 'Verified' },
+    'pending': { icon: Clock, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-500/10', badge: 'badge-warning', label: 'Pending' },
+    'not-started': { icon: AlertTriangle, color: 'text-surface-400', bg: 'bg-surface-50 dark:bg-surface-800/50', badge: 'badge-neutral', label: 'Not Started' },
+    'rejected': { icon: AlertTriangle, color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-500/10', badge: 'badge-danger', label: 'Rejected' },
   }
 
-  if (loading) return <div className="text-center py-8">Loading...</div>
-  if (error) return <div className="text-center py-8 text-red-600">{error}</div>
+  if (loading) {
+    return (
+      <div className="max-w-3xl mx-auto space-y-6">
+        <div className="skeleton h-8 w-48 rounded-2xl" />
+        {[1, 2, 3].map(i => <div key={i} className="skeleton h-20 rounded-2xl" />)}
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <EmptyState icon={AlertTriangle} title="Failed to load verification" description={error}
+        action={<button onClick={() => window.location.reload()} className="btn-primary btn-sm">Retry</button>} />
+    )
+  }
 
   return (
-    <div className="max-w-3xl">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Verification Steps</h2>
-      <div className="card overflow-hidden">
-        <ul className="divide-y divide-gray-200">
-          {steps.map((step) => (
-            <li key={step.name} className="px-6 py-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  {getIcon(step.status)}
-                  <span className="ml-3 text-sm font-medium text-gray-900">{step.name}</span>
-                </div>
-                {step.link && step.status !== 'verified' ? (
-                  <button onClick={() => toast.success('Redirecting to verification...')} className="text-sm text-blue-600 hover:text-blue-500">
-                    Verify
-                  </button>
-                ) : (
-                  <span className="text-sm text-gray-500 capitalize">{step.status.replace('-', ' ')}</span>
-                )}
+    <div className="max-w-3xl mx-auto space-y-6">
+      <PageHeader title="Verification" subtitle="Complete all steps to become a verified member" />
+
+      {overallStatus === 'REJECTED' && rejectionReason && (
+        <AnimatedPage>
+          <div className="rounded-2xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 p-5">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="font-bold text-red-700 dark:text-red-400 text-sm">Verification Rejected</h3>
+                <p className="text-sm text-red-600 dark:text-red-300 mt-1">{rejectionReason}</p>
+                <p className="text-sm text-red-500 dark:text-red-400 mt-2">Please re-upload the required documents below.</p>
               </div>
-            </li>
-          ))}
-        </ul>
+            </div>
+          </div>
+        </AnimatedPage>
+      )}
+
+      {/* Progress Card */}
+      <AnimatedPage>
+        <GlassCard variant="elevated" padding="lg" className="bg-gradient-to-br from-primary-500/5 to-accent-500/5">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center shadow-lg shadow-primary-500/20">
+              <Shield className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h2 className="font-bold font-display text-surface-900 dark:text-white">Verification Progress</h2>
+              <p className="text-sm text-surface-500">{verifiedCount}/{steps.length} steps complete</p>
+            </div>
+          </div>
+          <div className="w-full h-3 bg-surface-200 dark:bg-surface-700 rounded-full overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-primary-500 to-accent-500 rounded-full transition-all duration-1000 ease-out" style={{ width: `${progress}%` }} />
+          </div>
+        </GlassCard>
+      </AnimatedPage>
+
+      {/* Steps */}
+      <div className="space-y-3">
+        {steps.map((step, index) => {
+          const config = statusConfig[step.status]
+          const StatusIcon = config.icon
+          const StepIcon = step.icon
+
+          return (
+            <AnimatedPage key={step.name} delay={100 + index * 50}>
+              <div className={`glass-card p-5 border-l-4 ${
+                step.status === 'verified' ? 'border-emerald-500' :
+                step.status === 'pending' ? 'border-amber-500' :
+                step.status === 'rejected' ? 'border-danger-500' :
+                'border-surface-200 dark:border-surface-700'
+              } hover:-translate-y-0.5 transition-all duration-300`}>
+                <div className="flex items-center gap-4">
+                  <div className={`w-11 h-11 rounded-2xl ${config.bg} flex items-center justify-center flex-shrink-0`}>
+                    <StepIcon className={`w-5 h-5 ${config.color}`} />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-bold font-display text-surface-900 dark:text-white">{step.name}</h3>
+                    <p className="text-xs text-surface-500 mt-0.5">{step.description}</p>
+                    {step.status === 'rejected' && step.rejectionReason && (
+                      <p className="text-xs text-red-500 mt-1">{step.rejectionReason}</p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <span className={config.badge}>
+                      <StatusIcon className="w-3 h-3" /> {config.label}
+                    </span>
+                    {step.status !== 'verified' && step.link && (
+                      <Link to={step.link} className="btn-primary btn-xs">
+                        {step.status === 'rejected' ? <><RefreshCw className="w-3 h-3" /> Re-submit</> :
+                         step.status === 'pending' ? <><span>Continue</span> <ArrowRight className="w-3 h-3" /></> :
+                         <><span>Start</span> <ArrowRight className="w-3 h-3" /></>}
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </AnimatedPage>
+          )
+        })}
       </div>
+
+      {/* Benefits */}
+      <AnimatedPage delay={400}>
+        <GlassCard variant="elevated" padding="lg" className="bg-gradient-to-br from-primary-500/5 to-accent-500/5">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center shadow-lg shadow-primary-500/20 flex-shrink-0">
+              <UserCheck className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h3 className="font-bold font-display text-surface-900 dark:text-white mb-1">Why Get Verified?</h3>
+              <p className="text-sm text-surface-500 mb-3">Verified members enjoy higher trust scores, premium features, and increased visibility.</p>
+              <div className="flex flex-wrap gap-2">
+                {['Higher trust score', 'Priority matching', 'Verified badge', 'Access to events'].map((benefit) => (
+                  <span key={benefit} className="badge-glass text-xs">
+                    <Sparkles className="w-3 h-3 text-primary-500" /> {benefit}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </GlassCard>
+      </AnimatedPage>
     </div>
   )
 }

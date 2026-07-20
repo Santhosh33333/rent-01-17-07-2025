@@ -1,102 +1,172 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { AuthProvider } from './lib/auth'
+import { lazy, Suspense } from 'react'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { ProtectedRoute } from './components/ProtectedRoute'
-import { AdminRoute } from './components/AdminRoute'
 import { Layout } from './components/Layout'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
-import { LoginPage } from './pages/auth/LoginPage'
-import { RegisterPage } from './pages/auth/RegisterPage'
-import { VerifyEmailPage } from './pages/auth/VerifyEmailPage'
-import { VerifyMobilePage } from './pages/auth/VerifyMobilePage'
-import { DashboardPage } from './pages/dashboard/DashboardPage'
-import { ProfilePage } from './pages/profile/ProfilePage'
-import { VerificationPage } from './pages/verification/VerificationPage'
-import { VerifySelfiePage } from './pages/verification/VerifySelfiePage'
-import { VerifyGovIdPage } from './pages/verification/VerifyGovIdPage'
-import { VerifyAddressPage } from './pages/verification/VerifyAddressPage'
-import { WalletPage } from './pages/wallet/WalletPage'
-import { WithdrawalPage } from './pages/wallet/WithdrawalPage'
-import { TransactionHistoryPage } from './pages/wallet/TransactionHistoryPage'
-import { WalkingRequestsPage } from './pages/walking-requests/WalkingRequestsPage'
-import { CreateWalkingRequestPage } from './pages/walking-requests/CreateWalkingRequestPage'
-import { WalkingRequestDetailPage } from './pages/walking-requests/WalkingRequestDetailPage'
-import { CommunitiesPage } from './pages/communities/CommunitiesPage'
-import { CommunityDetailPage } from './pages/communities/CommunityDetailPage'
-import { EventsPage } from './pages/events/EventsPage'
-import { EventDetailPage } from './pages/events/EventDetailPage'
-import { MessagesPage } from './pages/messages/MessagesPage'
-import { ConversationPage } from './pages/messages/ConversationPage'
-import { ApplyPage } from './pages/walking-partner/ApplyPage'
-import { StatusPage } from './pages/walking-partner/StatusPage'
-import { AdminPortalPage } from './pages/admin/AdminPortalPage'
-import { AdminDashboardPage } from './pages/admin/AdminDashboardPage'
-import { AdminUsersPage } from './pages/admin/AdminUsersPage'
-import { AdminKycPage } from './pages/admin/AdminKycPage'
-import { AdminWithdrawalsPage } from './pages/admin/AdminWithdrawalsPage'
-import { AdminReportsPage } from './pages/admin/AdminReportsPage'
-import { AdminAuditLogsPage } from './pages/admin/AdminAuditLogsPage'
-import { AdminWalkingPartnersPage } from './pages/admin/AdminWalkingPartnersPage'
+// Lazy-loaded auth pages
+const LoginPage = lazy(() => import('./pages/auth/LoginPage').then(m => ({ default: m.LoginPage })))
+const RegisterPage = lazy(() => import('./pages/auth/RegisterPage').then(m => ({ default: m.RegisterPage })))
+const ForgotPasswordPage = lazy(() => import('./pages/auth/ForgotPasswordPage').then(m => ({ default: m.ForgotPasswordPage })))
+const VerifyEmailPage = lazy(() => import('./pages/auth/VerifyEmailPage').then(m => ({ default: m.VerifyEmailPage })))
+const VerifyMobilePage = lazy(() => import('./pages/auth/VerifyMobilePage').then(m => ({ default: m.VerifyMobilePage })))
 
-function App() {
+// Splash & Onboarding
+const SplashPage = lazy(() => import('./pages/splash/SplashPage').then(m => ({ default: m.SplashPage })))
+const OnboardingPage = lazy(() => import('./pages/onboarding/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
+const ProfileCompletionPage = lazy(() => import('./pages/profile/ProfileCompletionPage').then(m => ({ default: m.ProfileCompletionPage })))
+
+// User pages
+const DashboardPage = lazy(() => import('./pages/dashboard/DashboardPage').then(m => ({ default: m.DashboardPage })))
+const ProfilePage = lazy(() => import('./pages/profile/ProfilePage').then(m => ({ default: m.ProfilePage })))
+const VerificationPage = lazy(() => import('./pages/verification/VerificationPage').then(m => ({ default: m.VerificationPage })))
+const KycStep1PersonalDetails = lazy(() => import('./pages/verification/KycStep1PersonalDetails').then(m => ({ default: m.KycStep1PersonalDetails })))
+const KycStep2GovId = lazy(() => import('./pages/verification/KycStep2GovId').then(m => ({ default: m.KycStep2GovId })))
+const KycStep3Selfie = lazy(() => import('./pages/verification/KycStep3Selfie').then(m => ({ default: m.KycStep3Selfie })))
+const KycStep4AddressProof = lazy(() => import('./pages/verification/KycStep4AddressProof').then(m => ({ default: m.KycStep4AddressProof })))
+const KycStep5EmergencyContact = lazy(() => import('./pages/verification/KycStep5EmergencyContact').then(m => ({ default: m.KycStep5EmergencyContact })))
+const KycStep6Review = lazy(() => import('./pages/verification/KycStep6Review').then(m => ({ default: m.KycStep6Review })))
+const VerifySelfiePage = lazy(() => import('./pages/verification/VerifySelfiePage').then(m => ({ default: m.VerifySelfiePage })))
+const VerifyGovIdPage = lazy(() => import('./pages/verification/VerifyGovIdPage').then(m => ({ default: m.VerifyGovIdPage })))
+const VerifyAddressPage = lazy(() => import('./pages/verification/VerifyAddressPage').then(m => ({ default: m.VerifyAddressPage })))
+const WalletPage = lazy(() => import('./pages/wallet/WalletPage').then(m => ({ default: m.WalletPage })))
+const TransactionHistoryPage = lazy(() => import('./pages/wallet/TransactionHistoryPage').then(m => ({ default: m.TransactionHistoryPage })))
+const TopUpPage = lazy(() => import('./pages/wallet/TopUpPage').then(m => ({ default: m.TopUpPage })))
+const WalkingRequestsPage = lazy(() => import('./pages/walking-requests/WalkingRequestsPage').then(m => ({ default: m.WalkingRequestsPage })))
+const CreateWalkingRequestPage = lazy(() => import('./pages/walking-requests/CreateWalkingRequestPage').then(m => ({ default: m.CreateWalkingRequestPage })))
+const WalkingRequestDetailPage = lazy(() => import('./pages/walking-requests/WalkingRequestDetailPage').then(m => ({ default: m.WalkingRequestDetailPage })))
+const CommunitiesPage = lazy(() => import('./pages/communities/CommunitiesPage').then(m => ({ default: m.CommunitiesPage })))
+const CommunityDetailPage = lazy(() => import('./pages/communities/CommunityDetailPage').then(m => ({ default: m.CommunityDetailPage })))
+const EventsPage = lazy(() => import('./pages/events/EventsPage').then(m => ({ default: m.EventsPage })))
+const EventDetailPage = lazy(() => import('./pages/events/EventDetailPage').then(m => ({ default: m.EventDetailPage })))
+const MessagesPage = lazy(() => import('./pages/messages/MessagesPage').then(m => ({ default: m.MessagesPage })))
+const ConversationPage = lazy(() => import('./pages/messages/ConversationPage').then(m => ({ default: m.ConversationPage })))
+const PartnerJobsPage = lazy(() => import('./pages/partner/PartnerJobsPage').then(m => ({ default: m.PartnerJobsPage })))
+const PartnerWalletPage = lazy(() => import('./pages/partner/PartnerWalletPage').then(m => ({ default: m.PartnerWalletPage })))
+const PartnerProfilePage = lazy(() => import('./pages/partner/PartnerProfilePage').then(m => ({ default: m.PartnerProfilePage })))
+
+// Admin pages
+const AdminPortalPage = lazy(() => import('./pages/admin/AdminPortalPage').then(m => ({ default: m.AdminPortalPage })))
+const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage').then(m => ({ default: m.AdminDashboardPage })))
+const AdminUsersPage = lazy(() => import('./pages/admin/AdminUsersPage').then(m => ({ default: m.AdminUsersPage })))
+const AdminKycPage = lazy(() => import('./pages/admin/AdminKycPage').then(m => ({ default: m.AdminKycPage })))
+const AdminPartnersPage = lazy(() => import('./pages/admin/AdminWalkingPartnersPage').then(m => ({ default: m.AdminWalkingPartnersPage })))
+const AdminWithdrawalsPage = lazy(() => import('./pages/admin/AdminWithdrawalsPage').then(m => ({ default: m.AdminWithdrawalsPage })))
+const AdminReportsPage = lazy(() => import('./pages/admin/AdminReportsPage').then(m => ({ default: m.AdminReportsPage })))
+const AdminAuditLogsPage = lazy(() => import('./pages/admin/AdminAuditLogsPage').then(m => ({ default: m.AdminAuditLogsPage })))
+
+// Settings pages
+const SettingsPage = lazy(() => import('./pages/settings/SettingsPage').then(m => ({ default: m.SettingsPage })))
+const PrivacyPage = lazy(() => import('./pages/settings/PrivacyPage').then(m => ({ default: m.PrivacyPage })))
+
+// Notifications
+const NotificationsPage = lazy(() => import('./pages/notifications/NotificationsPage').then(m => ({ default: m.NotificationsPage })))
+
+// Wallet
+const WithdrawalPage = lazy(() => import('./pages/wallet/WithdrawalPage').then(m => ({ default: m.WithdrawalPage })))
+
+// New pages
+const HomePage = lazy(() => import('./pages/home/HomePage').then(m => ({ default: m.HomePage })))
+const DiscoverPage = lazy(() => import('./pages/home/DiscoverPage').then(m => ({ default: m.DiscoverPage })))
+const BookingsListPage = lazy(() => import('./pages/bookings/BookingsListPage').then(m => ({ default: m.BookingsListPage })))
+const CreateBookingPage = lazy(() => import('./pages/bookings/CreateBookingPage').then(m => ({ default: m.CreateBookingPage })))
+const BookingDetailPage = lazy(() => import('./pages/bookings/BookingDetailPage').then(m => ({ default: m.BookingDetailPage })))
+const BookingPaymentPage = lazy(() => import('./pages/bookings/BookingPaymentPage').then(m => ({ default: m.BookingPaymentPage })))
+const BookingTrackingPage = lazy(() => import('./pages/bookings/BookingTrackingPage').then(m => ({ default: m.BookingTrackingPage })))
+const RatingPage = lazy(() => import('./pages/bookings/RatingPage').then(m => ({ default: m.RatingPage })))
+const PartnerDashboardPage = lazy(() => import('./pages/partner/PartnerDashboardPage').then(m => ({ default: m.PartnerDashboardPage })))
+const PartnerMapPage = lazy(() => import('./pages/partner/PartnerMapPage').then(m => ({ default: m.PartnerMapPage })))
+const PartnerPerformancePage = lazy(() => import('./pages/partner/PartnerPerformancePage').then(m => ({ default: m.PartnerPerformancePage })))
+
+function LoadingSpinner() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            className: 'glass-card-sm !px-4 !py-3 !text-sm',
-            duration: 4000,
-          }}
-        />
-        <Routes>
-          {/* Auth routes - no layout */}
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/verify-email" element={<VerifyEmailPage />} />
-          <Route path="/verify-mobile" element={<VerifyMobilePage />} />
-
-          {/* App routes - with layout */}
-          <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/verification" element={<VerificationPage />} />
-            <Route path="/verification/selfie" element={<VerifySelfiePage />} />
-            <Route path="/verification/gov-id" element={<VerifyGovIdPage />} />
-            <Route path="/verification/address" element={<VerifyAddressPage />} />
-            <Route path="/wallet" element={<WalletPage />} />
-            <Route path="/wallet/withdraw" element={<WithdrawalPage />} />
-            <Route path="/wallet/history" element={<TransactionHistoryPage />} />
-            <Route path="/walking-requests" element={<WalkingRequestsPage />} />
-            <Route path="/walking-requests/create" element={<CreateWalkingRequestPage />} />
-            <Route path="/walking-requests/:id" element={<WalkingRequestDetailPage />} />
-            <Route path="/communities" element={<CommunitiesPage />} />
-            <Route path="/communities/:id" element={<CommunityDetailPage />} />
-            <Route path="/events" element={<EventsPage />} />
-            <Route path="/events/:id" element={<EventDetailPage />} />
-            <Route path="/messages" element={<MessagesPage />} />
-            <Route path="/messages/:userId" element={<ConversationPage />} />
-            <Route path="/walking-partner/apply" element={<ApplyPage />} />
-            <Route path="/walking-partner/status" element={<StatusPage />} />
-            <Route path="/admin/portal" element={<AdminPortalPage />} />
-          </Route>
-
-          {/* Admin routes - with layout + admin guard */}
-          <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
-            <Route path="/admin/users" element={<AdminRoute><AdminUsersPage /></AdminRoute>} />
-            <Route path="/admin/kyc" element={<AdminRoute><AdminKycPage /></AdminRoute>} />
-            <Route path="/admin/withdrawals" element={<AdminRoute><AdminWithdrawalsPage /></AdminRoute>} />
-            <Route path="/admin/reports" element={<AdminRoute><AdminReportsPage /></AdminRoute>} />
-            <Route path="/admin/audit-logs" element={<AdminRoute><AdminAuditLogsPage /></AdminRoute>} />
-            <Route path="/admin/walking-partners" element={<AdminRoute><AdminWalkingPartnersPage /></AdminRoute>} />
-          </Route>
-
-          <Route path="/" element={<Navigate to="/login" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+    <div className="flex items-center justify-center min-h-[40vh]">
+      <div className="w-8 h-8 rounded-full border-2 border-surface-200 dark:border-surface-700 border-t-primary-500 animate-spin" />
+    </div>
   )
 }
 
-export default App
+export function App() {
+  return (
+    <ErrorBoundary>
+      <Toaster position="top-center" toastOptions={{ duration: 3000, style: { background: '#18181b', color: '#fafafa', borderRadius: '16px' } }} />
+      <Suspense fallback={<LoadingSpinner />}>
+        <Routes>
+          <Route path="/" element={<SplashPage />} />
+          <Route path="/onboarding" element={<OnboardingPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/verify-mobile" element={<VerifyMobilePage />} />
+
+          <Route element={<ProtectedRoute />}>
+            <Route element={<Layout />}>
+              <Route path="/profile/complete" element={<ProfileCompletionPage />} />
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/verification" element={<VerificationPage />} />
+              <Route path="/verification/step1" element={<KycStep1PersonalDetails />} />
+              <Route path="/verification/step2" element={<KycStep2GovId />} />
+              <Route path="/verification/step3" element={<KycStep3Selfie />} />
+              <Route path="/verification/step4" element={<KycStep4AddressProof />} />
+              <Route path="/verification/step5" element={<KycStep5EmergencyContact />} />
+              <Route path="/verification/step6" element={<KycStep6Review />} />
+              <Route path="/verification/selfie" element={<VerifySelfiePage />} />
+              <Route path="/verification/gov-id" element={<VerifyGovIdPage />} />
+              <Route path="/verification/address" element={<VerifyAddressPage />} />
+              <Route path="/wallet" element={<WalletPage />} />
+              <Route path="/wallet/topup" element={<TopUpPage />} />
+              <Route path="/wallet/withdraw" element={<WithdrawalPage />} />
+              <Route path="/wallet/transactions" element={<TransactionHistoryPage />} />
+              {/* New Home & Discovery */}
+              <Route path="/home" element={<HomePage />} />
+              <Route path="/discover" element={<DiscoverPage />} />
+
+              {/* New Booking System */}
+              <Route path="/bookings" element={<BookingsListPage />} />
+              <Route path="/bookings/create" element={<CreateBookingPage />} />
+              <Route path="/bookings/:id" element={<BookingDetailPage />} />
+              <Route path="/bookings/:id/payment" element={<BookingPaymentPage />} />
+              <Route path="/bookings/:id/tracking" element={<BookingTrackingPage />} />
+              <Route path="/bookings/:id/rate" element={<RatingPage />} />
+
+              {/* Unified Partner Pages */}
+              <Route path="/partner/dashboard" element={<PartnerDashboardPage />} />
+              <Route path="/partner/jobs" element={<PartnerJobsPage />} />
+              <Route path="/partner/map" element={<PartnerMapPage />} />
+              <Route path="/partner/wallet" element={<PartnerWalletPage />} />
+              <Route path="/partner/performance" element={<PartnerPerformancePage />} />
+              <Route path="/partner/profile" element={<PartnerProfilePage />} />
+
+              <Route path="/walking-requests" element={<WalkingRequestsPage />} />
+              <Route path="/walking-requests/create" element={<CreateWalkingRequestPage />} />
+              <Route path="/walking-requests/:id" element={<WalkingRequestDetailPage />} />
+              <Route path="/communities" element={<CommunitiesPage />} />
+              <Route path="/communities/:id" element={<CommunityDetailPage />} />
+              <Route path="/events" element={<EventsPage />} />
+              <Route path="/events/:id" element={<EventDetailPage />} />
+              <Route path="/messages" element={<MessagesPage />} />
+              <Route path="/messages/:conversationId" element={<ConversationPage />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/settings/privacy" element={<PrivacyPage />} />
+            </Route>
+
+            <Route path="/admin/portal" element={<AdminPortalPage />} />
+            <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+            <Route path="/admin/users" element={<AdminUsersPage />} />
+            <Route path="/admin/kyc" element={<AdminKycPage />} />
+            <Route path="/admin/partners" element={<AdminPartnersPage />} />
+            <Route path="/admin/withdrawals" element={<AdminWithdrawalsPage />} />
+            <Route path="/admin/reports" element={<AdminReportsPage />} />
+            <Route path="/admin/audit-logs" element={<AdminAuditLogsPage />} />
+          </Route>
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
+    </ErrorBoundary>
+  )
+}
