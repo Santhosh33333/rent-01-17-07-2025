@@ -1,80 +1,167 @@
 import { useState, useEffect } from 'react';
-import { Link, useLocation, Outlet } from 'react-router-dom';
+import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import {
-  Home, User, Wallet, Users, MessageCircle, Sun, Moon, Menu, X, Bell,
-  MapPin, LogOut
+  Home, User, Wallet, Users, Sun, Moon, Menu, X, Bell,
+  MapPin, LogOut, Calendar, Settings, Shield, Info, LayoutDashboard,
+  ClipboardList, Search
 } from 'lucide-react';
 import { useAuth } from '../lib/auth';
+import { useRole } from '../lib/roleContext';
+import { RoleSwitcher } from './RoleSwitcher';
 
-const navItems = [
-  { to: '/dashboard', icon: Home, label: 'Home' },
-  { to: '/communities', icon: Users, label: 'Communities' },
-  { to: '/messages', icon: MessageCircle, label: 'Messages' },
-  { to: '/wallet', icon: Wallet, label: 'Wallet' },
+const userNav = [
+  { to: '/home', icon: Home, label: 'Home' },
+  { to: '/discover', icon: Search, label: 'Discover' },
+  { to: '/bookings', icon: Calendar, label: 'Bookings' },
+  { to: '/communities', icon: Users, label: 'Social' },
   { to: '/profile', icon: User, label: 'Profile' },
+];
+
+const partnerNav = [
+  { to: '/partner/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/partner/jobs', icon: ClipboardList, label: 'Jobs' },
+  { to: '/partner/map', icon: MapPin, label: 'Map' },
+  { to: '/partner/wallet', icon: Wallet, label: 'Wallet' },
+  { to: '/partner/profile', icon: User, label: 'Profile' },
+];
+
+const adminNav = [
+  { to: '/admin/dashboard', icon: Shield, label: 'Dashboard' },
+  { to: '/admin/users', icon: Users, label: 'Users' },
+  { to: '/admin/partners', icon: Users, label: 'Partners' },
+  { to: '/admin/payments', icon: Wallet, label: 'Payments' },
+  { to: '/admin/settings', icon: Settings, label: 'Settings' },
+];
+
+const sidebarLinks = [
+  { to: '/settings', icon: Settings, label: 'Settings' },
+  { to: '/notifications', icon: Bell, label: 'Notifications' },
+  { to: '/privacy', icon: Shield, label: 'Privacy' },
+  { to: '/about', icon: Info, label: 'About' },
 ];
 
 export function Layout() {
   const { user, logout } = useAuth();
+  const { activeRole } = useRole();
   const location = useLocation();
+  const navigate = useNavigate();
   const [dark, setDark] = useState(() => {
     if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('theme');
-      if (stored) return stored === 'dark';
-      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+      return localStorage.getItem('theme') === 'dark' || 
+        (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
     }
     return false;
   });
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [, setMobileMenuOpen] = useState(false);
+
+  const navItems = activeRole === 'PARTNER' ? partnerNav
+    : ['ADMIN', 'SUPER_ADMIN', 'MODERATOR', 'SUPPORT', 'FINANCE'].includes(activeRole) ? adminNav
+    : userNav;
 
   useEffect(() => {
-    const root = document.documentElement;
-    if (dark) {
-      root.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      root.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-    }
+    document.documentElement.classList.toggle('dark', dark);
+    localStorage.setItem('theme', dark ? 'dark' : 'light');
   }, [dark]);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 10);
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
+    setSidebarOpen(false);
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
 
-  const isActive = (path: string) => location.pathname.startsWith(path);
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
-    <div className="min-h-screen bg-surface-50 dark:bg-surface-950 transition-colors duration-300">
-      {/* ===== TOP HEADER (Desktop) ===== */}
-      <header
-        className={`hidden md:block sticky top-0 z-50 transition-all duration-300 ${
-          scrolled
-            ? 'glass border-b border-white/10 dark:border-surface-700/30 shadow-glass'
-            : 'bg-transparent'
-        }`}
-      >
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/30 to-violet-50/20 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
+      {/* Header */}
+      <header className="sticky top-0 z-50 backdrop-blur-xl bg-white/80 dark:bg-gray-950/80 border-b border-gray-200/50 dark:border-gray-800/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <Link to="/dashboard" className="flex items-center gap-3 group">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center shadow-lg shadow-primary-500/25 group-hover:shadow-primary-500/40 transition-shadow">
-                <MapPin className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-xl font-bold text-gradient">RentBuddy</span>
-            </Link>
+            {/* Left */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition lg:hidden"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+              <Link to="/dashboard" className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 via-indigo-400 to-orange-500 flex items-center justify-center">
+                  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none">
+                    <path d="M12 3L20 9V20H14V13H10V20H4V9L12 3Z" fill="white" fillOpacity="0.93"/>
+                    <circle cx="9.5" cy="8.5" r="1.5" fill="#f97316" fillOpacity="0.9"/>
+                    <circle cx="14.5" cy="8.5" r="1.5" fill="#f97316" fillOpacity="0.9"/>
+                    <path d="M9.5 6.5Q12 4.5 14.5 6.5" stroke="white" strokeWidth="0.8" strokeOpacity="0.5" fill="none" strokeLinecap="round"/>
+                  </svg>
+                </div>
+                <span className="text-lg font-bold bg-gradient-to-r from-indigo-600 to-orange-500 bg-clip-text text-transparent hidden sm:block">
+                  RentBuddy
+                </span>
+              </Link>
+            </div>
 
-            <nav className="flex items-center gap-1">
-              {navItems.map(({ to, icon: Icon, label }) => (
+            {/* Center - Role Switcher */}
+            <RoleSwitcher />
+
+            {/* Right */}
+            <div className="flex items-center gap-2">
+              <Link to="/search" className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition hidden sm:block" title="Search">
+                <Search className="w-5 h-5" />
+              </Link>
+              <button
+                onClick={() => setDark(!dark)}
+                className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+              >
+                {dark ? <Sun className="w-5 h-5 text-yellow-500" /> : <Moon className="w-5 h-5 text-gray-600" />}
+              </button>
+              <Link to="/notifications" className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition relative">
+                <Bell className="w-5 h-5" />
+              </Link>
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition hidden lg:block"
+              >
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-sm font-bold">
+                  {user?.name?.charAt(0) || 'U'}
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Sidebar */}
+      {sidebarOpen && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-50 lg:hidden" onClick={() => setSidebarOpen(false)} />
+          <div className="fixed inset-y-0 left-0 w-72 bg-white dark:bg-gray-900 z-50 shadow-2xl p-4 overflow-y-auto animate-in slide-in-from-left duration-200">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold">
+                  {user?.name?.charAt(0) || 'U'}
+                </div>
+                <div>
+                  <p className="font-semibold text-sm">{user?.name}</p>
+                  <p className="text-xs text-gray-500">{user?.email}</p>
+                </div>
+              </div>
+              <button onClick={() => setSidebarOpen(false)} className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <nav className="space-y-1">
+              {sidebarLinks.map(({ to, icon: Icon, label }) => (
                 <Link
                   key={to}
                   to={to}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
-                    isActive(to)
-                      ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
-                      : 'text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 hover:text-surface-900 dark:hover:text-surface-200'
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition ${
+                    location.pathname === to
+                      ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 font-medium'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                   }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -83,122 +170,48 @@ export function Layout() {
               ))}
             </nav>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setDark(!dark)}
-                className="btn-icon btn-ghost rounded-xl"
-                aria-label="Toggle theme"
-              >
-                {dark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-              </button>
-              <button className="btn-icon btn-ghost rounded-xl relative">
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
-              </button>
-              <button
-                onClick={logout}
-                className="btn-icon btn-ghost rounded-xl text-surface-400 hover:text-red-500"
-                aria-label="Logout"
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+            <hr className="my-4 border-gray-200 dark:border-gray-800" />
 
-      {/* ===== MOBILE HEADER ===== */}
-      <header
-        className={`md:hidden sticky top-0 z-50 transition-all duration-300 ${
-          scrolled ? 'glass border-b border-white/10 dark:border-surface-700/30' : 'bg-transparent'
-        }`}
-      >
-        <div className="flex items-center justify-between px-4 h-14">
-          <Link to="/dashboard" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
-              <MapPin className="w-4 h-4 text-white" />
-            </div>
-            <span className="text-lg font-bold text-gradient">RentBuddy</span>
-          </Link>
-          <div className="flex items-center gap-1">
-            <button onClick={() => setDark(!dark)} className="btn-icon btn-ghost rounded-lg" aria-label="Toggle theme">
-              {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            </button>
-            <button className="btn-icon btn-ghost rounded-lg relative">
-              <Bell className="w-4 h-4" />
-              <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-red-500 rounded-full" />
-            </button>
-            <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="btn-icon btn-ghost rounded-lg">
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* ===== MAIN CONTENT ===== */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-24 md:pb-8 pt-4 page-enter">
-        <Outlet />
-      </main>
-
-      {/* ===== MOBILE BOTTOM NAV ===== */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 glass border-t border-white/10 dark:border-surface-700/30">
-        <div className="flex items-center justify-around px-2 py-2">
-          {navItems.map(({ to, icon: Icon, label }) => (
-            <Link
-              key={to}
-              to={to}
-              className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl text-[10px] font-medium transition-all duration-200 ${
-                isActive(to)
-                  ? 'text-primary-600 dark:text-primary-400'
-                  : 'text-surface-400 dark:text-surface-500'
-              }`}
-            >
-              <Icon className={`w-5 h-5 ${isActive(to) ? 'text-primary-500' : ''}`} />
-              {label}
-            </Link>
-          ))}
-        </div>
-      </nav>
-
-      {/* ===== MOBILE SIDEBAR OVERLAY ===== */}
-      {mobileMenuOpen && (
-        <div className="md:hidden fixed inset-0 z-40">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)} />
-          <div className="absolute right-0 top-0 bottom-0 w-72 glass border-l border-white/10 dark:border-surface-700/30 p-6 animate-slide-in-right">
-            <div className="flex items-center justify-between mb-6">
-              <span className="text-lg font-bold text-gradient">Menu</span>
-              <button onClick={() => setMobileMenuOpen(false)} className="btn-icon btn-ghost rounded-lg">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="space-y-1">
-              {navItems.map(({ to, icon: Icon, label }) => (
-                <Link
-                  key={to}
-                  to={to}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                    isActive(to)
-                      ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
-                      : 'text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800'
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  {label}
-                </Link>
-              ))}
-            </div>
-            <div className="divider my-4" />
             <button
-              onClick={() => { logout(); setMobileMenuOpen(false); }}
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 w-full"
+              onClick={handleLogout}
+              className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition"
             >
-              <LogOut className="w-5 h-5" />
+              <LogOut className="w-4 h-4" />
               Sign Out
             </button>
           </div>
-        </div>
+        </>
       )}
+
+      {/* Main Content */}
+      <main className="pb-20 lg:pb-4">
+        <Outlet />
+      </main>
+
+      {/* Bottom Navigation */}
+      <nav className="fixed bottom-0 inset-x-0 bg-white/90 dark:bg-gray-950/90 backdrop-blur-xl border-t border-gray-200/50 dark:border-gray-800/50 z-40 lg:hidden">
+        <div className="flex items-center justify-around h-16 px-2">
+          {navItems.map(({ to, icon: Icon, label }) => {
+            const isActive = location.pathname === to || location.pathname.startsWith(to.split('/').slice(0, -1).join('/') + '/');
+            return (
+              <Link
+                key={to}
+                to={to}
+                className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all min-w-[60px] ${
+                  isActive
+                    ? 'text-indigo-600 dark:text-indigo-400'
+                    : 'text-gray-400 dark:text-gray-500'
+                }`}
+              >
+                <div className={`p-1 rounded-xl transition ${isActive ? 'bg-indigo-50 dark:bg-indigo-900/30' : ''}`}>
+                  <Icon className="w-5 h-5" />
+                </div>
+                <span className="text-[10px] font-medium">{label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
     </div>
   );
 }

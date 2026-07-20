@@ -3,6 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import path from "path";
+import http from "http";
 
 import { env } from "./config/env";
 import { generalRateLimiter } from "./middleware/rateLimiter";
@@ -18,8 +19,25 @@ import communityRoutes from "./routes/communityRoutes";
 import eventRoutes from "./routes/eventRoutes";
 import messageRoutes from "./routes/messageRoutes";
 import adminRoutes from "./routes/adminRoutes";
+import pricingRoutes from "./routes/pricingRoutes";
+import notificationRoutes from "./routes/notificationRoutes";
+import settingsRoutes from "./routes/settingsRoutes";
+import appContentRoutes from "./routes/appContentRoutes";
+import callRoutes from "./routes/callRoutes";
+import carryBuddyRoutes from "./routes/carryBuddyRoutes";
+import friendshipRoutes from "./routes/friendshipRoutes";
+import roleRoutes from "./routes/roleRoutes";
+import dashboardRoutes from "./routes/dashboardRoutes";
+import roleApplicationsRoutes from "./routes/roleApplicationsRoutes";
+import locationRoutes from "./routes/locationRoutes";
+import chatRequestRoutes from "./routes/chatRequestRoutes";
+import privacyRoutes from "./routes/privacyRoutes";
+import paymentRoutes from "./routes/paymentRoutes";
+import bookingRoutes from "./routes/bookingRoutes";
+import partnerRoutes from "./routes/partnerRoutes";
+import searchRoutes from "./routes/searchRoutes";
 
-export function createApp(): Application {
+export function createApp(): http.Server {
   const app = express();
 
   app.use(helmet());
@@ -29,7 +47,16 @@ export function createApp(): Application {
   app.use(morgan(env.isProduction ? "combined" : "dev"));
   app.use(generalRateLimiter);
 
-  app.use("/uploads", express.static(path.resolve(process.cwd(), env.UPLOAD_DIR)));
+  app.use("/uploads", express.static(path.resolve(process.cwd(), env.UPLOAD_DIR), {
+    maxAge: "7d",
+    etag: true,
+    lastModified: true,
+  }));
+
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    next();
+  });
 
   app.get("/health", (_req: Request, res: Response) => {
     res.status(200).json({ success: true, data: { status: "ok", timestamp: new Date().toISOString() } });
@@ -45,6 +72,23 @@ export function createApp(): Application {
   app.use("/api/events", eventRoutes);
   app.use("/api/messages", messageRoutes);
   app.use("/api/admin", adminRoutes);
+  app.use("/api/pricing", pricingRoutes);
+  app.use("/api/notifications", notificationRoutes);
+  app.use("/api/settings", settingsRoutes);
+  app.use("/api/content", appContentRoutes);
+  app.use("/api/calls", callRoutes);
+  app.use("/api/carry-buddy", carryBuddyRoutes);
+  app.use("/api/friendships", friendshipRoutes);
+  app.use("/api/roles", roleRoutes);
+  app.use("/api/dashboard", dashboardRoutes);
+  app.use("/api/role-applications", roleApplicationsRoutes);
+  app.use("/api/location", locationRoutes);
+  app.use("/api/chat-requests", chatRequestRoutes);
+  app.use("/api/privacy", privacyRoutes);
+  app.use("/api/payments", paymentRoutes);
+  app.use("/api/bookings", bookingRoutes);
+  app.use("/api/partner", partnerRoutes);
+  app.use("/api", searchRoutes);
 
   app.use((req: Request, res: Response) => {
     sendError(res, `Route not found: ${req.method} ${req.path}`, 404, "NOT_FOUND");
@@ -63,5 +107,6 @@ export function createApp(): Application {
     sendError(res, "Internal server error.", 500, "INTERNAL_ERROR");
   });
 
-  return app;
+  const server = http.createServer(app);
+  return server;
 }
