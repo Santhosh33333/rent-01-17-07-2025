@@ -15,46 +15,61 @@ interface SearchResult {
 }
 
 /**
- * Universal search across all entities
- * GET /search?q=keyword&filter=all|users|events|communities&limit=20
+ * Universal search across all entities with pagination
+ * GET /search?q=keyword&filter=all|users|events|communities&page=1&limit=20
  */
 export async function search(req: Request, res: Response) {
   try {
-    const { q, filter = 'all', limit = 20 } = req.query
+    const { q, filter = 'all', page = '1', limit = '20' } = req.query
     const query = String(q || '').trim().toLowerCase()
-    const searchLimit = Math.min(Number(limit) || 20, 100)
+    const pageNum = Math.max(1, Number(page) || 1)
+    const pageSize = Math.min(Math.max(5, Number(limit) || 20), 100)
+    const skip = (pageNum - 1) * pageSize
 
     if (!query || query.length < 2) {
       return res.json({
         success: true,
-        data: { results: [], total: 0 },
+        data: { results: [], total: 0, page: pageNum, limit: pageSize, pages: 0 },
         message: 'Query too short'
       })
     }
 
     const results: SearchResult[] = []
+    let totalCount = 0
 
     // Search users
     if (filter === 'all' || filter === 'users') {
-      const users = await prisma.user.findMany({
-        where: {
-          OR: [
-            { fullName: { contains: query } },
-            { email: { contains: query } },
-            { phone: { contains: query } },
-          ]
-        },
-        select: {
-          id: true,
-          fullName: true,
-          email: true,
-          avatarUrl: true,
-          status: true,
-        },
-        take: searchLimit,
-      })
+      const [userResults, userCount] = await Promise.all([
+        prisma.user.findMany({
+          where: {
+            OR: [
+              { fullName: { contains: query } },
+              { email: { contains: query } },
+              { phone: { contains: query } },
+            ]
+          },
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            avatarUrl: true,
+            status: true,
+          },
+          skip: filter === 'users' ? skip : 0,
+          take: filter === 'users' ? pageSize : pageSize,
+        }),
+        prisma.user.count({
+          where: {
+            OR: [
+              { fullName: { contains: query } },
+              { email: { contains: query } },
+              { phone: { contains: query } },
+            ]
+          }
+        })
+      ])
 
-      results.push(...users.map(u => ({
+      results.push(...userResults.map(u => ({
         type: 'user' as const,
         id: u.id,
         title: u.fullName || 'Anonymous',
@@ -64,30 +79,46 @@ export async function search(req: Request, res: Response) {
         link: `/profile/${u.id}`,
         metadata: { status: u.status }
       })))
+
+      if (filter === 'users') {
+        totalCount = userCount
+      }
     }
 
     // Search events
     if (filter === 'all' || filter === 'events') {
-      const events = await prisma.event.findMany({
-        where: {
-          OR: [
-            { title: { contains: query } },
-            { description: { contains: query } },
-            { location: { contains: query } },
-          ]
-        },
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          location: true,
-          startTime: true,
-          attendeeCount: true,
-        },
-        take: searchLimit,
-      })
+      const [eventResults, eventCount] = await Promise.all([
+        prisma.event.findMany({
+          where: {
+            OR: [
+              { title: { contains: query } },
+              { description: { contains: query } },
+              { location: { contains: query } },
+            ]
+          },
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            location: true,
+            startTime: true,
+            attendeeCount: true,
+          },
+          skip: filter === 'events' ? skip : 0,
+          take: filter === 'events' ? pageSize : pageSize,
+        }),
+        prisma.event.count({
+          where: {
+            OR: [
+              { title: { contains: query } },
+              { description: { contains: query } },
+              { location: { contains: query } },
+            ]
+          }
+        })
+      ])
 
-      results.push(...events.map(e => ({
+      results.push(...eventResults.map(e => ({
         type: 'event' as const,
         id: e.id,
         title: e.title,
@@ -100,27 +131,42 @@ export async function search(req: Request, res: Response) {
           attendeeCount: e.attendeeCount
         }
       })))
+
+      if (filter === 'events') {
+        totalCount = eventCount
+      }
     }
 
     // Search communities
     if (filter === 'all' || filter === 'communities') {
-      const communities = await prisma.community.findMany({
-        where: {
-          OR: [
-            { name: { contains: query } },
-            { description: { contains: query } },
-          ]
-        },
-        select: {
-          id: true,
-          name: true,
-          description: true,
-          memberCount: true,
-        },
-        take: searchLimit,
-      })
+      const [communitiesResults, communitiesCount] = await Promise.all([
+        prisma.community.findMany({
+          where: {
+            OR: [
+              { name: { contains: query } },
+              { description: { contains: query } },
+            ]
+          },
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            memberCount: true,
+          },
+          skip: filter === 'communities' ? skip : 0,
+          take: filter === 'communities' ? pageSize : pageSize,
+        }),
+        prisma.community.count({
+          where: {
+            OR: [
+              { name: { contains: query } },
+              { description: { contains: query } },
+            ]
+          }
+        })
+      ])
 
-      results.push(...communities.map(c => ({
+      results.push(...communitiesResults.map(c => ({
         type: 'community' as const,
         id: c.id,
         title: c.name,
@@ -131,20 +177,39 @@ export async function search(req: Request, res: Response) {
           members: c.memberCount
         }
       })))
+
+      if (filter === 'communities') {
+        totalCount = communitiesCount
+      }
     }
 
-    // Sort by relevance (exact match first, then partial)
-    const sortedResults = results.sort((a, b) => {
-      const aExact = a.title.toLowerCase() === query ? 0 : 1
-      const bExact = b.title.toLowerCase() === query ? 0 : 1
-      return aExact - bExact
-    })
+    // For 'all' filter, combine and sort by relevance
+    if (filter === 'all') {
+      totalCount = results.length
+      results.sort((a, b) => {
+        const aExact = a.title.toLowerCase() === query ? 0 : 1
+        const bExact = b.title.toLowerCase() === query ? 0 : 1
+        return aExact - bExact
+      })
+    } else {
+      // For specific filter, sort by relevance
+      results.sort((a, b) => {
+        const aExact = a.title.toLowerCase() === query ? 0 : 1
+        const bExact = b.title.toLowerCase() === query ? 0 : 1
+        return aExact - bExact
+      })
+    }
+
+    const totalPages = Math.ceil(totalCount / pageSize)
 
     return res.json({
       success: true,
       data: {
-        results: sortedResults.slice(0, searchLimit),
-        total: sortedResults.length,
+        results: results.slice(0, pageSize),
+        total: totalCount,
+        page: pageNum,
+        limit: pageSize,
+        pages: totalPages,
         query,
         filter
       }

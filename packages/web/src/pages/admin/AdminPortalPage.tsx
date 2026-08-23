@@ -1,94 +1,48 @@
-import { useState } from 'react'
-import { useForm } from 'react-hook-form'
-import { useNavigate, Navigate } from 'react-router-dom'
-import toast from 'react-hot-toast'
-import { api } from '../../lib/api'
-
-interface PasswordForm {
-  password: string
-}
+import { Link } from 'react-router-dom'
+import {
+  LayoutDashboard, Users, ShieldCheck, Handshake,
+  Banknote, Flag, ScrollText, ArrowLeft
+} from 'lucide-react'
 
 export function AdminPortalPage() {
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const navigate = useNavigate()
-  const { register, handleSubmit, formState: { errors } } = useForm<PasswordForm>()
-
-  const userStr = localStorage.getItem('user')
-  let user: { email: string; role?: string } | null = null
-  try { user = userStr ? JSON.parse(userStr) : null } catch { user = null }
-
-  if (!user) {
-    return <Navigate to="/login" replace />
-  }
-
-  const adminRoles = ["SUPER_ADMIN", "ADMIN", "MODERATOR", "SUPPORT", "FINANCE"]
-  if (!adminRoles.includes(user.role || "")) {
-    return <Navigate to="/dashboard" replace />
-  }
-
-  const onSubmit = async (data: PasswordForm) => {
-    try {
-      setLoading(true)
-      setError(null)
-      const response = await api.post('/auth/verify-password', {
-        email: user!.email,
-        password: data.password,
-      })
-      const result = response.data
-      if (!result.success) {
-        setError(result.error || 'Invalid password')
-        return
-      }
-      localStorage.setItem('adminToken', result.data.accessToken)
-      toast.success('Admin access granted')
-      navigate('/admin/dashboard', { replace: true })
-    } catch (err: any) {
-      setError(err?.response?.data?.error || 'Verification failed')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const sections = [
+    { path: '/admin/dashboard', title: 'Dashboard', desc: 'Overview & analytics', icon: LayoutDashboard },
+    { path: '/admin/users', title: 'Users', desc: 'Manage user accounts', icon: Users },
+    { path: '/admin/kyc', title: 'KYC Verification', desc: 'Review identity documents', icon: ShieldCheck },
+    { path: '/admin/partners', title: 'Partners', desc: 'Approve & manage partners', icon: Handshake },
+    { path: '/admin/withdrawals', title: 'Withdrawals', desc: 'Review withdrawal requests', icon: Banknote },
+    { path: '/admin/reports', title: 'Reports', desc: 'Review user reports', icon: Flag },
+    { path: '/admin/audit-logs', title: 'Audit Logs', desc: 'System activity logs', icon: ScrollText },
+  ]
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Admin Portal
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Re-enter your password to access admin features
-          </p>
+    <div className="min-h-screen bg-gray-950 p-6">
+      <div className="max-w-5xl mx-auto">
+        <div className="flex items-center gap-3 mb-8">
+          <Link to="/dashboard" className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition">
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold text-white">Admin Portal</h1>
+            <p className="text-gray-400 text-sm mt-1">Manage your RentBuddy platform</p>
+          </div>
         </div>
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
-          <div>
-            <label htmlFor="password" className="label">Password</label>
-            <input
-              {...register('password', { required: 'Password is required' })}
-              type="password"
-              className="input rounded-md"
-              placeholder="••••••••"
-            />
-            {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>}
-          </div>
-
-          {error && (
-            <div className="rounded-md bg-red-50 p-3">
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-          )}
-
-          <div className="flex space-x-4">
-            <button type="submit" disabled={loading} className="btn-primary flex-1">
-              {loading ? 'Verifying...' : 'Continue'}
-            </button>
-            <button type="button" onClick={() => navigate('/dashboard')} className="btn-secondary flex-1">
-              Cancel
-            </button>
-          </div>
-        </form>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {sections.map((s) => (
+            <Link
+              key={s.path}
+              to={s.path}
+              className="bg-gray-800 p-6 rounded-xl hover:bg-gray-700 transition group"
+            >
+              <div className="w-12 h-12 rounded-xl bg-gray-700 group-hover:bg-gray-600 flex items-center justify-center mb-3 transition">
+                <s.icon className="w-6 h-6 text-blue-400" />
+              </div>
+              <h2 className="text-white font-semibold text-lg">{s.title}</h2>
+              <p className="text-gray-400 text-sm mt-1">{s.desc}</p>
+            </Link>
+          ))}
+        </div>
       </div>
     </div>
   )

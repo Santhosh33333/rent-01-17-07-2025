@@ -1,26 +1,17 @@
-import { Navigate, useLocation, Outlet } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
+import { useRole } from '../lib/roleContext'
 
 interface AdminRouteProps {
   children?: React.ReactNode
 }
 
 export function AdminRoute({ children }: AdminRouteProps) {
-  const userStr = localStorage.getItem('user')
-  const location = useLocation()
+  const { activeRole } = useRole()
 
-  if (!userStr) {
-    return <Navigate to="/login" state={{ from: location }} replace />
+  const adminRoles = ['SUPER_ADMIN', 'ADMIN', 'MODERATOR', 'SUPPORT', 'FINANCE']
+  if (!adminRoles.includes(activeRole)) {
+    return <Navigate to="/dashboard" replace />
   }
 
-  try {
-    const user = JSON.parse(userStr)
-    const adminRoles = ["SUPER_ADMIN", "ADMIN", "MODERATOR", "SUPPORT", "FINANCE"]
-    if (!adminRoles.includes(user.role)) {
-      return <Navigate to="/dashboard" state={{ from: location }} replace />
-    }
-  } catch {
-    return <Navigate to="/login" state={{ from: location }} replace />
-  }
-
-  return children ? <>{children}</> : <Outlet />
+  return children ? <>{children}</> : null
 }

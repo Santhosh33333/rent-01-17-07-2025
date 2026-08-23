@@ -13,26 +13,29 @@ interface RefreshTokenPayload {
   type: "refresh";
 }
 
+const accessSecret = env.JWT_ACCESS_SECRET ?? env.JWT_SECRET;
+const refreshSecret = env.JWT_REFRESH_SECRET ?? env.JWT_SECRET;
+
 export function generateAccessToken(user: AuthPayload): string {
   const payload: AccessTokenPayload = {
     userId: user.userId,
     email: user.email,
     type: "access",
   };
-  return jwt.sign(payload, env.JWT_ACCESS_SECRET, {
+  return jwt.sign(payload, accessSecret, {
     expiresIn: env.JWT_ACCESS_EXPIRY as jwt.SignOptions["expiresIn"],
   });
 }
 
 export function generateRefreshToken(userId: string): string {
   const payload: RefreshTokenPayload = { userId, type: "refresh" };
-  return jwt.sign(payload, env.JWT_REFRESH_SECRET, {
+  return jwt.sign(payload, refreshSecret, {
     expiresIn: env.JWT_REFRESH_EXPIRY as jwt.SignOptions["expiresIn"],
   });
 }
 
 export function verifyAccessToken(token: string): AccessTokenPayload {
-  const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as jwt.JwtPayload;
+  const decoded = jwt.verify(token, accessSecret) as jwt.JwtPayload;
   if (decoded.type !== "access") {
     throw new Error("Invalid token type");
   }
@@ -40,7 +43,7 @@ export function verifyAccessToken(token: string): AccessTokenPayload {
 }
 
 export function verifyRefreshToken(token: string): RefreshTokenPayload {
-  const decoded = jwt.verify(token, env.JWT_REFRESH_SECRET) as jwt.JwtPayload;
+  const decoded = jwt.verify(token, refreshSecret) as jwt.JwtPayload;
   if (decoded.type !== "refresh") {
     throw new Error("Invalid token type");
   }

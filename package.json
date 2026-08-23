@@ -1,22 +1,33 @@
 {
-  "name": "rentbuddy",
-  "version": "1.0.0",
+  "name": "rentbuddy-2026",
+  "version": "2.0.0",
   "private": true,
-  "description": "RentBuddy - Trust-based social platform for real-world connections",
-  "devDependencies": {
-    "concurrently": "^9.1.0"
+  "description": "RentBuddy 2026 — Enterprise rebuild monorepo",
+  "workspaces": [
+    "packages/backend",
+    "packages/web"
+  ],
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
   },
   "scripts": {
-    "dev:backend": "cd packages/backend && npm run dev",
-    "dev:frontend": "cd packages/web && npm run dev",
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "build": "cd packages/web && npm run build",
-    "build:backend": "cd packages/backend && npm run build",
+    "dev:backend": "npm run dev --workspace=packages/backend",
+    "dev:admin": "npm run dev --workspace=packages/admin-web",
+    "dev:web": "npm run dev --workspace=packages/web",
+    "build:backend": "npm run build --workspace=packages/backend",
+    "build:admin": "npm run build --workspace=packages/admin-web",
+    "build:web": "npm run build --workspace=packages/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:generate": "npm run prisma:generate --workspace=packages/backend",
+    "db:migrate": "npm run prisma:migrate --workspace=packages/backend",
+    "db:seed": "npm run prisma:seed --workspace=packages/backend",
+    "db:studio": "npm run prisma:studio --workspace=packages/backend",
     "docker:up": "docker-compose up --build",
-    "docker:down": "docker-compose down",
-    "db:generate": "cd packages/backend && npx prisma generate",
-    "db:migrate": "cd packages/backend && npx prisma migrate dev",
-    "db:seed": "cd packages/backend && npm run prisma:seed",
-    "db:studio": "cd packages/backend && npx prisma studio"
+    "docker:down": "docker-compose down"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
   }
 }

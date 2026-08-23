@@ -1,12 +1,25 @@
 import { Navigate, useLocation, Outlet } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
+import { useRole } from '../lib/roleContext'
 
 interface ProtectedRouteProps {
   children?: React.ReactNode
+  allowedRoles?: string[]
 }
 
-export function ProtectedRoute({ children }: ProtectedRouteProps) {
+const ROLE_DASHBOARDS: Record<string, string> = {
+  USER: '/dashboard',
+  PARTNER: '/partner/dashboard',
+  ADMIN: '/admin/dashboard',
+  SUPER_ADMIN: '/admin/dashboard',
+  MODERATOR: '/admin/dashboard',
+  SUPPORT: '/admin/dashboard',
+  FINANCE: '/admin/dashboard',
+}
+
+export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const { user, loading } = useAuth()
+  const { activeRole } = useRole()
   const location = useLocation()
 
   if (loading) {
@@ -24,5 +37,21 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
+  const profileComplete = localStorage.getItem('profile_complete') === 'true' || Boolean(user.city)
+  const isProfileRoute = location.pathname === '/profile/complete'
+  const isAuthRoute = ['/login', '/register', '/forgot-password', '/verify-email', '/verify-mobile', '/onboarding'].includes(location.pathname)
+
+  if (!profileComplete && !isProfileRoute && !isAuthRoute) {
+    return <Navigate to="/profile/complete" replace />
+  }
+
+  // Check if user has access to this route based on their active role
+  if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(activeRole)) {
+    const dashboard = ROLE_DASHBOARDS[activeRole] || '/dashboard'
+    return <Navigate to={dashboard} replace />
+  }
+
   return children ? <>{children}</> : <Outlet />
 }
+
+export { ROLE_DASHBOARDS }

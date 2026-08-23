@@ -1,105 +1,288 @@
 import { useState, useEffect } from 'react'
-import { CheckCircle, XCircle } from 'lucide-react'
-import { api } from '../../lib/api'
-import toast from 'react-hot-toast'
+import { Link } from 'react-router-dom'
+import { ArrowLeft, ChevronLeft, ChevronRight, Check, X, Wallet, CreditCard } from 'lucide-react'
+import { adminApi } from '../../lib/api'
 
 interface Partner {
   id: string
-  user: { fullName: string; email: string }
+  userId: string
+  name: string
+  email: string
+  phone: string
   status: string
-  totalWalks: number
-  rating: number
+  services: string[]
+  bankAccount?: string
+  upiId?: string
+  createdAt: string
 }
 
 export function AdminWalkingPartnersPage() {
-  const [list, setList] = useState<Partner[]>([])
+  const [partners, setPartners] = useState<Partner[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState('')
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [statusFilter, setStatusFilter] = useState('PENDING')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [rejectId, setRejectId] = useState<string | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
 
-  useEffect(() => {
-    const fetchPartners = async () => {
-      try {
-        const response = await api.get('/admin/walking-partners')
-        const result = response.data
-        if (result.success) {
-          setList(result.data.items)
-        } else {
-          setError(result.error || 'Failed to fetch walking partners')
-        }
-      } catch (err: any) {
-        setError(err?.response?.data?.error || 'Failed to fetch walking partners')
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchPartners()
-  }, [])
-
-  const handleAction = async (id: string, action: 'approve' | 'reject') => {
+  const fetchPartners = async () => {
+    setLoading(true)
+    setError('')
     try {
-      const endpoint = action === 'approve' ? `/admin/walking-partners/${id}/approve` : `/admin/walking-partners/${id}/reject`
-      await api.post(endpoint)
-      toast.success(`Partner ${action}d`)
-      setList(list.filter(p => p.id !== id))
-    } catch {
-      toast.error(`Failed to ${action} partner`)
+      const params: any = { page }
+      if (statusFilter) params.status = statusFilter
+      const res = await adminApi.getPartners(params)
+      const d = res.data?.data || res.data
+      setPartners(Array.isArray(d?.partners) ? d.partners : Array.isArray(d) ? d : [])
+      setTotalPages(d?.totalPages || 1)
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to load partners')
+    } finally {
+      setLoading(false)
     }
   }
 
-  if (loading) return <div className="text-center py-8">Loading...</div>
-  if (error) return <div className="text-center py-8 text-red-600">{error}</div>
+  useEffect(() => {
+    fetchPartners()
+  }, [page, statusFilter])
+
+  const handleApprove = async (id: string) => {
+    setActionLoading(id)
+    try {
+      await adminApi.approvePartner(id)
+      setPartners((prev) => prev.filter((p) => p.id !== id))
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to approve partner')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleReject = async (id: string) => {
+    if (!rejectReason.trim()) return
+    setActionLoading(id)
+    try {
+      await adminApi.rejectPartner(id, rejectReason)
+      setPartners((prev) => prev.filter((p) => p.id !== id))
+      setRejectId(null)
+      setRejectReason('')
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to reject partner')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const statusBadge = (status: string) => {
+    const map: Record<string, string> = {
+      PENDING: 'bg-amber-900/30 text-amber-400',
+      APPROVED: 'bg-emerald-900/30 text-emerald-400',
+      REJECTED: 'bg-red-900/30 text-red-400',
+      ACTIVE: 'bg-emerald-900/30 text-emerald-400',
+      SUSPENDED: 'bg-red-900/30 text-red-400',
+    }
+    return map[status] || 'bg-gray-700 text-gray-400'
+  }
+
+  const serviceBadge = (service: string) => {
+    const map: Record<string, string> = {
+      WALKING: 'bg-emerald-900/40 text-emerald-300',
+      CARRY_BUDDY: 'bg-amber-900/40 text-amber-300',
+    }
+    return map[service] || 'bg-gray-700 text-gray-300'
+  }
 
   return (
-    <div className="space-y-4">
-      <div className="card overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Walks</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rating</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {list.map(partner => (
-              <tr key={partner.id}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{partner.user.fullName}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{partner.user.email}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    partner.status === 'APPROVED' ? 'bg-green-100 text-green-800' :
-                    partner.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-red-100 text-red-800'
-                  }`}>
-                    {partner.status.toLowerCase()}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{partner.totalWalks}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{partner.rating > 0 ? partner.rating.toFixed(1) : 'N/A'}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2">
-                  {partner.status === 'PENDING' && (
-                    <>
-                      <button onClick={() => handleAction(partner.id, 'approve')} className="text-green-600 hover:text-green-800">
-                        <CheckCircle className="h-5 w-5" />
-                      </button>
-                      <button onClick={() => handleAction(partner.id, 'reject')} className="text-red-600 hover:text-red-800">
-                        <XCircle className="h-5 w-5" />
-                      </button>
-                    </>
-                  )}
-                </td>
-              </tr>
+    <div className="min-h-screen bg-gray-950 p-6">
+      <div className="max-w-5xl mx-auto">
+        <div className="flex items-center gap-3 mb-6">
+          <Link to="/admin/portal" className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition">
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold text-white">Partners</h1>
+            <p className="text-gray-400 text-sm mt-1">Approve & manage partner applications</p>
+          </div>
+        </div>
+
+        <div className="mb-6">
+          <div className="flex gap-2">
+            {['PENDING', 'APPROVED', 'REJECTED'].map((s) => (
+              <button
+                key={s}
+                onClick={() => { setStatusFilter(s); setPage(1) }}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                  statusFilter === s
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
+                }`}
+              >
+                {s.charAt(0) + s.slice(1).toLowerCase()}
+              </button>
             ))}
-            {list.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-6 py-4 text-center text-sm text-gray-500">No walking partners found</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+          </div>
+        </div>
+
+        {error && (
+          <div className="bg-red-900/20 border border-red-800 text-red-300 p-4 rounded-xl mb-4 text-center">
+            {error}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="text-center py-20">
+            <div className="w-8 h-8 rounded-full border-2 border-gray-700 border-t-blue-500 animate-spin mx-auto" />
+            <p className="text-gray-400 mt-4">Loading partners...</p>
+          </div>
+        ) : partners.length === 0 ? (
+          <div className="text-center py-20">
+            <p className="text-gray-400">No partner applications found</p>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-3">
+              {partners.map((partner) => (
+                <div key={partner.id} className="bg-gray-800 rounded-xl overflow-hidden">
+                  <div
+                    className="p-4 cursor-pointer hover:bg-gray-750 transition"
+                    onClick={() => setExpandedId(expandedId === partner.id ? null : partner.id)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-white">
+                          {partner.name?.charAt(0)?.toUpperCase() || '?'}
+                        </div>
+                        <div>
+                          <p className="text-white font-medium text-sm">{partner.name || 'Unknown'}</p>
+                          <p className="text-gray-500 text-xs">{partner.email}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="hidden sm:flex gap-1">
+                          {(partner.services || []).map((svc) => (
+                            <span key={svc} className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${serviceBadge(svc)}`}>
+                              {svc === 'WALKING' ? 'Walking' : svc === 'CARRY_BUDDY' ? 'Carry' : svc}
+                            </span>
+                          ))}
+                        </div>
+                        <span className="text-gray-500 text-xs hidden sm:block">
+                          {partner.createdAt ? new Date(partner.createdAt).toLocaleDateString('en-IN') : '-'}
+                        </span>
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusBadge(partner.status)}`}>
+                          {partner.status}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {expandedId === partner.id && (
+                    <div className="p-4 border-t border-gray-700/50">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm mb-4">
+                        <div>
+                          <p className="text-gray-500 text-xs">Partner ID</p>
+                          <p className="text-white font-mono text-xs">{partner.id}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs">Phone</p>
+                          <p className="text-white">{partner.phone || 'Not provided'}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs flex items-center gap-1">
+                            <Wallet className="w-3 h-3" /> Bank Account
+                          </p>
+                          <p className="text-white text-xs">{partner.bankAccount || 'Not provided'}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs flex items-center gap-1">
+                            <CreditCard className="w-3 h-3" /> UPI ID
+                          </p>
+                          <p className="text-white text-xs">{partner.upiId || 'Not provided'}</p>
+                        </div>
+                      </div>
+
+                      {partner.services && partner.services.length > 0 && (
+                        <div className="mb-4">
+                          <p className="text-gray-500 text-xs mb-2">Services Offered</p>
+                          <div className="flex gap-2">
+                            {partner.services.map((svc) => (
+                              <span key={svc} className={`text-xs px-3 py-1 rounded-full font-medium ${serviceBadge(svc)}`}>
+                                {svc === 'WALKING' ? 'Walking Buddy' : svc === 'CARRY_BUDDY' ? 'CarryBuddy' : svc}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {partner.status === 'PENDING' && (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleApprove(partner.id) }}
+                            disabled={actionLoading === partner.id}
+                            className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition"
+                          >
+                            <Check className="w-4 h-4" />
+                            {actionLoading === partner.id ? 'Processing...' : 'Approve'}
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setRejectId(rejectId === partner.id ? null : partner.id) }}
+                            disabled={actionLoading === partner.id}
+                            className="flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition"
+                          >
+                            <X className="w-4 h-4" />
+                            Reject
+                          </button>
+                        </div>
+                      )}
+
+                      {rejectId === partner.id && (
+                        <div className="mt-3 flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Rejection reason..."
+                            value={rejectReason}
+                            onChange={(e) => setRejectReason(e.target.value)}
+                            className="flex-1 px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:border-red-500"
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => handleReject(partner.id)}
+                            disabled={!rejectReason.trim() || actionLoading === partner.id}
+                            className="px-4 py-2 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition"
+                          >
+                            Confirm
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between mt-4">
+              <p className="text-gray-500 text-sm">Page {page} of {totalPages}</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed text-gray-400 hover:text-white transition"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed text-gray-400 hover:text-white transition"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

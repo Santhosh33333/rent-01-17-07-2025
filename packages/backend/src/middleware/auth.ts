@@ -2,7 +2,19 @@ import { Response, NextFunction } from "express";
 import { verifyAccessToken } from "../utils/jwt";
 import { prisma } from "../config/database";
 import { sendError } from "../utils/response";
-import { AuthedRequest, AuthenticatedUser } from "./authTypes";
+import { AuthedRequest, AuthenticatedUser, UserRole } from "./authTypes";
+
+export function verifyToken(token: string): { userId: string; email: string; role?: string } | null {
+  try {
+    const payload = verifyAccessToken(token);
+    return {
+      userId: payload.userId,
+      email: payload.email,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export async function authenticateToken(req: AuthedRequest, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -17,7 +29,7 @@ export async function authenticateToken(req: AuthedRequest, res: Response, next:
 
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, email: true, status: true, role: true },
+      select: { id: true, email: true, status: true, role: true, activeRole: true },
     });
 
     if (!user) {
@@ -30,11 +42,26 @@ export async function authenticateToken(req: AuthedRequest, res: Response, next:
       return;
     }
 
-    req.user = { userId: user.id, email: user.email, role: user.role as AuthenticatedUser["role"] };
+    req.user = {
+      userId: user.id,
+      email: user.email,
+      role: user.role as UserRole,
+      activeRole: (user.activeRole as UserRole) || (user.role as UserRole),
+    };
     next();
   } catch (err) {
     sendError(res, "Invalid or expired token.", 401, "INVALID_TOKEN");
   }
+}
+
+export function requireRole(...roles: string[]) {
+  return (req: AuthedRequest, res: Response, next: NextFunction): void => {
+    if (!req.user?.activeRole || !roles.includes(req.user.activeRole)) {
+      sendError(res, "Access denied for current role.", 403, "FORBIDDEN");
+      return;
+    }
+    next();
+  };
 }
 
 export async function requireVerification(req: AuthedRequest, res: Response, next: NextFunction): Promise<void> {
@@ -63,23 +90,23 @@ export async function requireWalkingPartner(req: AuthedRequest, res: Response, n
       sendError(res, "Authentication required.", 401, "UNAUTHORIZED");
       return;
     }
-    const partner = await prisma.walkingPartner.findUnique({
+    const partner = await prisma.partner.findUnique({
       where: { userId: req.user.userId },
       select: { status: true },
     });
     if (!partner || partner.status !== "APPROVED") {
-      sendError(res, "Approved walking partner status required.", 403, "WALKING_PARTNER_REQUIRED");
+      sendError(res, "Approved partner status required.", 403, "PARTNER_REQUIRED");
       return;
     }
     next();
   } catch {
-    sendError(res, "Walking partner check failed.", 500, "INTERNAL_ERROR");
+    sendError(res, "Partner check failed.", 500, "INTERNAL_ERROR");
   }
 }
 
 export async function requireAdmin(req: AuthedRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    if (!req.user?.role || !["SUPER_ADMIN", "ADMIN", "MODERATOR", "SUPPORT", "FINANCE"].includes(req.user.role)) {
+    if (!req.user?.activeRole || !["SUPER_ADMIN", "ADMIN", "MODERATOR", "SUPPORT", "FINANCE"].includes(req.user.activeRole)) {
       sendError(res, "Admin access required.", 403, "FORBIDDEN");
       return;
     }
@@ -89,9 +116,25 @@ export async function requireAdmin(req: AuthedRequest, res: Response, next: Next
   }
 }
 
+export async function requirePartner(req: AuthedRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const partner = await prisma.partner.findUnique({
+      where: { userId: req.user?.userId },
+      select: { id: true, status: true },
+    });
+    if (!partner || partner.status !== "APPROVED") {
+      sendError(res, "Approved partner status required.", 403, "PARTNER_REQUIRED");
+      return;
+    }
+    next();
+  } catch {
+    sendError(res, "Partner check failed.", 500, "INTERNAL_ERROR");
+  }
+}
+
 export async function requireSuperAdmin(req: AuthedRequest, res: Response, next: NextFunction): Promise<void> {
   try {
-    if (!req.user?.role || req.user.role !== "SUPER_ADMIN") {
+    if (!req.user?.activeRole || req.user.activeRole !== "SUPER_ADMIN") {
       sendError(res, "Super admin access required.", 403, "FORBIDDEN");
       return;
     }

@@ -89,4 +89,16 @@ router.post(
   bookingController.rateBooking
 );
 
+// Select payment method (after partner accepts)
+router.post(
+  '/:id/select-payment-method',
+  [body('paymentMethod').notEmpty().isIn(['ONLINE', 'CASH'])],
+  sanitizeInput,
+  validateRequest,
+  bookingController.selectPaymentMethod
+);
+
+// Partner confirms cash received
+router.post('/:id/confirm-cash', bookingController.confirmCashReceived);
+
 export default router;

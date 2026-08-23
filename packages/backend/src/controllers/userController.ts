@@ -19,6 +19,8 @@ export async function getProfile(req: AuthedRequest, res: Response): Promise<voi
         city: true,
         country: true,
         status: true,
+        role: true,
+        activeRole: true,
         emailVerified: true,
         mobileVerified: true,
         createdAt: true,
@@ -40,7 +42,7 @@ export async function updateProfile(req: AuthedRequest, res: Response): Promise<
     const updated = await prisma.user.update({
       where: { id: req.user!.userId },
       data: { fullName, bio, city, country, gender },
-      select: { id: true, fullName: true, bio: true, city: true, country: true, gender: true },
+      select: { id: true, fullName: true, bio: true, city: true, country: true, gender: true, role: true, activeRole: true },
     });
     sendSuccess(res, updated, "Profile updated.");
   } catch (err) {
@@ -132,5 +134,129 @@ export async function trustScore(req: AuthedRequest, res: Response): Promise<voi
     sendSuccess(res, score ?? { score: 0 }, "Trust score retrieved.");
   } catch (err) {
     sendError(res, "Failed to retrieve trust score.", 500, "INTERNAL_ERROR");
+  }
+}
+
+export async function getProfileStats(req: AuthedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user!.userId;
+    const [walksCompleted, eventsJoined, rating, user] = await Promise.all([
+      prisma.walkingRequest.count({ where: { completedById: userId, status: "COMPLETED" } }),
+      prisma.eventAttendee.count({ where: { userId, status: { in: ["REGISTERED", "CHECKED_IN"] } } }),
+      prisma.rating.aggregate({ _avg: { score: true }, where: { ratedId: userId } }),
+      prisma.user.findUnique({ where: { id: userId }, select: { createdAt: true } }),
+    ]);
+    const joinedYear = user?.createdAt ? String(user.createdAt.getFullYear()) : "—";
+    sendSuccess(res, {
+      walksCompleted,
+      eventsJoined,
+      averageRating: rating._avg.score ? Number(rating._avg.score.toFixed(1)) : 0,
+      joinedYear,
+    }, "Profile stats retrieved.");
+  } catch (err) {
+    sendError(res, "Failed to retrieve profile stats.", 500, "INTERNAL_ERROR");
+  }
+}
+
+export async function getProfileFull(req: AuthedRequest, res: Response): Promise<void> {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.userId },
+      select: {
+        id: true, email: true, phone: true, fullName: true, dateOfBirth: true,
+        gender: true, avatarUrl: true, bio: true, city: true, country: true,
+        status: true, emailVerified: true, mobileVerified: true, role: true, createdAt: true,
+      },
+    });
+    if (!user) { sendError(res, "User not found.", 404, "USER_NOT_FOUND"); return; }
+    const [verification, trustScore, partnerLevel, wallet] = await Promise.all([
+      prisma.verification.findUnique({ where: { userId: req.user!.userId }, select: { status: true, govIdType: true } }),
+      prisma.trustScore.findUnique({ where: { userId: req.user!.userId } }),
+      prisma.partnerLevel.findUnique({ where: { userId: req.user!.userId } }),
+      prisma.wallet.findUnique({ where: { userId: req.user!.userId }, select: { balance: true, currency: true } }),
+    ]);
+    sendSuccess(res, { ...user, verification, trustScore, partnerLevel, wallet }, "Full profile retrieved.");
+  } catch (err) {
+    sendError(res, "Failed to retrieve profile.", 500, "INTERNAL_ERROR");
+  }
+}
+
+export async function blockUser(req: AuthedRequest, res: Response): Promise<void> {
+  try {
+    const { userId: blockedId } = req.body;
+    if (blockedId === req.user!.userId) { sendError(res, "Cannot block yourself.", 400, "INVALID"); return; }
+    const existing = await prisma.userBlock.findUnique({ where: { blockerId_blockedId: { blockerId: req.user!.userId, blockedId } } });
+    if (existing) { sendError(res, "User already blocked.", 400, "ALREADY_BLOCKED"); return; }
+    await prisma.userBlock.create({ data: { blockerId: req.user!.userId, blockedId } });
+    sendSuccess(res, undefined, "User blocked.");
+  } catch (err) {
+    sendError(res, "Failed to block user.", 500, "INTERNAL_ERROR");
+  }
+}
+
+export async function unblockUser(req: AuthedRequest, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    await prisma.userBlock.deleteMany({ where: { blockerId: req.user!.userId, blockedId: id } });
+    sendSuccess(res, undefined, "User unblocked.");
+  } catch (err) {
+    sendError(res, "Failed to unblock user.", 500, "INTERNAL_ERROR");
+  }
+}
+
+export async function getBlockedUsers(req: AuthedRequest, res: Response): Promise<void> {
+  try {
+    const blocks = await prisma.userBlock.findMany({
+      where: { blockerId: req.user!.userId },
+      include: { blocked: { select: { id: true, fullName: true, avatarUrl: true, email: true } } },
+    });
+    sendSuccess(res, blocks, "Blocked users retrieved.");
+  } catch (err) {
+    sendError(res, "Failed to retrieve blocked users.", 500, "INTERNAL_ERROR");
+  }
+}
+
+export async function reportUser(req: AuthedRequest, res: Response): Promise<void> {
+  try {
+    const { targetId, targetType, reason, description } = req.body;
+    const report = await prisma.report.create({
+      data: { reporterId: req.user!.userId, targetId, targetType: targetType || "USER", reason, description },
+    });
+    sendSuccess(res, report, "Report submitted.", 201);
+  } catch (err) {
+    sendError(res, "Failed to submit report.", 500, "INTERNAL_ERROR");
+  }
+}
+
+export async function getSosStatus(req: AuthedRequest, res: Response): Promise<void> {
+  try {
+    const active = await prisma.sosAlert.findFirst({ where: { userId: req.user!.userId, status: "ACTIVE" } });
+    sendSuccess(res, { active: !!active, alert: active }, "SOS status retrieved.");
+  } catch (err) {
+    sendError(res, "Failed to retrieve SOS status.", 500, "INTERNAL_ERROR");
+  }
+}
+
+export async function triggerSos(req: AuthedRequest, res: Response): Promise<void> {
+  try {
+    const { latitude, longitude, message } = req.body;
+    const alert = await prisma.sosAlert.create({
+      data: { userId: req.user!.userId, latitude, longitude, message: message || "Emergency SOS" },
+    });
+    await prisma.notification.create({
+      data: { userId: req.user!.userId, title: "SOS Alert Activated", body: "Your emergency alert has been sent. Stay safe.", data: JSON.stringify({ alertId: alert.id }) },
+    });
+    sendSuccess(res, alert, "SOS alert activated.", 201);
+  } catch (err) {
+    sendError(res, "Failed to trigger SOS.", 500, "INTERNAL_ERROR");
+  }
+}
+
+export async function cancelSos(req: AuthedRequest, res: Response): Promise<void> {
+  try {
+    await prisma.sosAlert.updateMany({ where: { userId: req.user!.userId, status: "ACTIVE" }, data: { status: "CANCELLED", resolvedAt: new Date() } });
+    sendSuccess(res, undefined, "SOS alert cancelled.");
+  } catch (err) {
+    sendError(res, "Failed to cancel SOS.", 500, "INTERNAL_ERROR");
   }
 }

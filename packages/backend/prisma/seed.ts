@@ -79,8 +79,8 @@ async function main(): Promise<void> {
   });
 
   console.log("Seed complete.");
-  console.log("Admin:", admin.email, "| Role:", admin.role, "| Password:", env.ADMIN_PASSWORD ?? "300703Ss");
-  console.log("User:", user.email, "| Password: user123");
+  console.log("Admin:", admin.email, "| Role:", admin.role);
+  console.log("User:", user.email);
 }
 
 main()

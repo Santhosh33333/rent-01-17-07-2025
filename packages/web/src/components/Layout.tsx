@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { useRole } from '../lib/roleContext';
+import { useTheme } from '../lib/themeContext';
 import { RoleSwitcher } from './RoleSwitcher';
 
 const userNav = [
@@ -30,39 +31,28 @@ const adminNav = [
   { to: '/admin/users', icon: Users, label: 'Users' },
   { to: '/admin/partners', icon: Users, label: 'Partners' },
   { to: '/admin/payments', icon: Wallet, label: 'Payments' },
-  { to: '/admin/settings', icon: Settings, label: 'Settings' },
+  { to: '/admin/reports', icon: Shield, label: 'Reports' },
 ];
 
 const sidebarLinks = [
   { to: '/settings', icon: Settings, label: 'Settings' },
   { to: '/notifications', icon: Bell, label: 'Notifications' },
-  { to: '/privacy', icon: Shield, label: 'Privacy' },
-  { to: '/about', icon: Info, label: 'About' },
+  { to: '/settings/privacy', icon: Shield, label: 'Privacy' },
+  { to: '/home', icon: Info, label: 'About' },
 ];
 
 export function Layout() {
   const { user, logout } = useAuth();
   const { activeRole } = useRole();
+  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
-  const [dark, setDark] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('theme') === 'dark' || 
-        (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    }
-    return false;
-  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [, setMobileMenuOpen] = useState(false);
 
   const navItems = activeRole === 'PARTNER' ? partnerNav
     : ['ADMIN', 'SUPER_ADMIN', 'MODERATOR', 'SUPPORT', 'FINANCE'].includes(activeRole) ? adminNav
     : userNav;
-
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', dark);
-    localStorage.setItem('theme', dark ? 'dark' : 'light');
-  }, [dark]);
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -112,10 +102,11 @@ export function Layout() {
                 <Search className="w-5 h-5" />
               </Link>
               <button
-                onClick={() => setDark(!dark)}
+                onClick={toggleTheme}
                 className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+                title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
               >
-                {dark ? <Sun className="w-5 h-5 text-yellow-500" /> : <Moon className="w-5 h-5 text-gray-600" />}
+                {theme === 'dark' ? <Sun className="w-5 h-5 text-yellow-500" /> : <Moon className="w-5 h-5 text-gray-600" />}
               </button>
               <Link to="/notifications" className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition relative">
                 <Bell className="w-5 h-5" />

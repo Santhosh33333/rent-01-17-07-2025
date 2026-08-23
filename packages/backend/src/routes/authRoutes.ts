@@ -3,6 +3,7 @@ import { body } from "express-validator";
 import { authRateLimiter } from "../middleware/rateLimiter";
 import { sanitizeInput, validateRequest } from "../middleware/validation";
 import * as authController from "../controllers/authController";
+import * as clerkAuthController from "../controllers/clerkAuthController";
 
 const router = Router();
 
@@ -28,6 +29,41 @@ router.post(
   [body("email").isEmail().withMessage("Valid email is required"), body("password").notEmpty().withMessage("Password is required")],
   validateRequest,
   authController.login
+);
+
+// Phone OTP Login (Firebase)
+router.post(
+  "/phone/send-otp",
+  authRateLimiter,
+  [body("phone").isMobilePhone("any").withMessage("Valid phone is required")],
+  validateRequest,
+  authController.sendPhoneOTP
+);
+
+router.post(
+  "/phone/verify-otp",
+  authRateLimiter,
+  [body("phone").isMobilePhone("any").withMessage("Valid phone is required"), body("otp").isLength({ min: 6, max: 6 }).withMessage("6-digit OTP is required")],
+  validateRequest,
+  authController.verifyPhoneOTP
+);
+
+// Google Sign-In
+router.post(
+  "/google",
+  authRateLimiter,
+  [body("idToken").notEmpty().withMessage("Google ID token is required")],
+  validateRequest,
+  authController.googleSignIn
+);
+
+// Apple Sign-In
+router.post(
+  "/apple",
+  authRateLimiter,
+  [body("idToken").notEmpty().withMessage("Apple ID token is required"), body("fullName").optional().isObject()],
+  validateRequest,
+  authController.appleSignIn
 );
 
 router.post("/logout", authController.logout);
@@ -81,6 +117,15 @@ router.post(
   [body("email").isEmail().normalizeEmail(), body("password").notEmpty()],
   validateRequest,
   authController.verifyPassword
+);
+
+// Clerk sync - exchange Clerk session token for our JWT
+router.post(
+  "/clerk",
+  authRateLimiter,
+  [body("token").notEmpty().withMessage("Clerk session token is required")],
+  validateRequest,
+  clerkAuthController.clerkSync
 );
 
 export default router;

@@ -85,9 +85,9 @@ export async function acceptWalkingRequest(req: AuthedRequest, res: Response): P
       sendError(res, "Cannot accept your own request.", 400, "INVALID_ACTION");
       return;
     }
-    const partner = await prisma.walkingPartner.findUnique({ where: { userId: req.user!.userId }, select: { status: true } });
+    const partner = await prisma.partner.findUnique({ where: { userId: req.user!.userId }, select: { status: true, providesWalking: true } });
     if (!partner || partner.status !== "APPROVED") {
-      sendError(res, "Approved walking partner status required.", 403, "WALKING_PARTNER_REQUIRED");
+      sendError(res, "Approved partner status required.", 403, "PARTNER_REQUIRED");
       return;
     }
 

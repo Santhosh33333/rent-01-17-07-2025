@@ -17,7 +17,7 @@ export type ReportType = "USER" | "COMMUNITY" | "EVENT" | "MESSAGE" | "OTHER";
 export type SosStatus = "ACTIVE" | "RESOLVED" | "CANCELLED";
 export type AdminRole = "ADMIN" | "SUPER_ADMIN";
 export type DeviceType = "IOS" | "ANDROID" | "WEB";
-export type RatingTarget = "USER" | "WALKING_PARTNER" | "COMMUNITY" | "EVENT";
+export type RatingTarget = "USER" | "PARTNER" | "COMMUNITY" | "EVENT";
 export type RatingType = "EXPERIENCE" | "SAFETY" | "RELIABILITY";
 
 export interface User {

@@ -1,84 +1,56 @@
 import { useState, useEffect } from 'react'
 import {
-  Users,
-  Calendar,
-  MessageSquare,
-  Wallet,
-  Footprints,
-  TrendingUp,
-  ArrowRight,
-  Shield,
-  Sparkles,
-  UserPlus,
-  Compass,
-  AlertTriangle,
+  Users, Calendar, MessageCircle, Wallet, MapPin, Heart,
+  Footprints, ArrowRight, TrendingUp, Star, ChevronRight, Home
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
 import { api } from '../../lib/api'
-import { StatCard } from '../../components/StatCard'
-import { TrustScoreDisplay } from '../../components/TrustScoreDisplay'
-import { VerificationBadge } from '../../components/VerificationBadge'
+import { AnimatedPage } from '../../components/AnimatedPage'
+import { GlassCard } from '../../components/GlassCard'
 
-type VerificationStatus = 'verified' | 'pending' | 'not-started' | 'rejected' | 'expired'
-
-interface DashboardData {
-  profile: { trustScore: number; verificationStatus: string } | null
+interface DashboardStats {
   wallet: { balance: number } | null
-  conversations: { unreadCount: number } | null
-  communities: { count: number } | null
-  events: { count: number } | null
-  walkingRequests: { count: number } | null
+  friends: number
+  communities: number
+  events: number
+  bookings: number
+  unreadMessages: number
 }
 
 export function DashboardPage() {
   const { user } = useAuth()
-  const [data, setData] = useState<DashboardData>({
-    wallet: null,
-    communities: null,
-    events: null,
-    walkingRequests: null,
-    profile: null,
-    conversations: null,
+  const [stats, setStats] = useState<DashboardStats>({
+    wallet: null, friends: 0, communities: 0, events: 0, bookings: 0, unreadMessages: 0
   })
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchDashboard = async () => {
       try {
-        const [profileRes, walletRes, conversationsRes, communitiesRes, eventsRes, walkingRes] =
+        const [statsRes, communitiesRes, eventsRes, walkingRes] =
           await Promise.allSettled([
-            api.get('/users/profile'),
-            api.get('/wallet'),
-            api.get('/messages/conversations'),
+            api.get('/dashboard/stats'),
             api.get('/communities'),
             api.get('/events'),
             api.get('/walking-requests'),
           ])
 
-        setData({
-          profile: profileRes.status === 'fulfilled' ? profileRes.value.data : null,
-          wallet: walletRes.status === 'fulfilled' ? walletRes.value.data : null,
-          conversations:
-            conversationsRes.status === 'fulfilled'
-              ? { unreadCount: conversationsRes.value.data?.unreadCount ?? 0 }
-              : null,
-          communities:
-            communitiesRes.status === 'fulfilled'
-              ? { count: Array.isArray(communitiesRes.value.data) ? communitiesRes.value.data.length : communitiesRes.value.data?.count ?? 0 }
-              : null,
-          events:
-            eventsRes.status === 'fulfilled'
-              ? { count: Array.isArray(eventsRes.value.data) ? eventsRes.value.data.length : eventsRes.value.data?.count ?? 0 }
-              : null,
-          walkingRequests:
-            walkingRequestsRes.status === 'fulfilled'
-              ? { count: Array.isArray(walkingRequestsRes.value.data) ? walkingRequestsRes.value.data.length : walkingRequestsRes.value.data?.count ?? 0 }
-              : null,
+        const statsData = statsRes.status === 'fulfilled' ? (statsRes.value.data?.data || statsRes.value.data || {}) : {}
+        const communitiesData = communitiesRes.status === 'fulfilled' ? (communitiesRes.value.data?.data || communitiesRes.value.data || null) : null
+        const eventsData = eventsRes.status === 'fulfilled' ? (eventsRes.value.data?.data || eventsRes.value.data || null) : null
+        const walkingData = walkingRes.status === 'fulfilled' ? (walkingRes.value.data?.data || walkingRes.value.data || null) : null
+
+        setStats({
+          wallet: statsData?.wallet ?? null,
+          friends: statsData?.friends ?? 0,
+          communities: Array.isArray(communitiesData) ? communitiesData.length : (communitiesData?.count ?? 0),
+          events: Array.isArray(eventsData) ? eventsData.length : (eventsData?.count ?? 0),
+          bookings: Array.isArray(walkingData) ? walkingData.length : (walkingData?.count ?? 0),
+          unreadMessages: statsData?.unreadMessages ?? 0,
         })
       } catch {
-        setError('Failed to load dashboard')
+        // fallback
       } finally {
         setLoading(false)
       }
@@ -86,278 +58,250 @@ export function DashboardPage() {
     fetchDashboard()
   }, [])
 
-  const trustScore = data.profile?.trustScore ?? user?.trustScore ?? 0
-  const walletBalance = data.wallet?.balance ?? 0
-  const unreadMessages = data.conversations?.unreadCount ?? 0
-  const communityCount = data.communities?.count ?? 0
-  const eventCount = data.events?.count ?? 0
-  const walkingRequestCount = data.walkingRequests?.count ?? 0
+  const userName = user?.name?.split(' ')[0] || 'there'
+  const walletBalance = stats.wallet?.balance ?? 0
 
-  const quickActions = [
-    { to: '/walking-requests', icon: Footprints, label: 'Find Walks', gradient: 'success' as const },
-    { to: '/walking-partner/apply', icon: UserPlus, label: 'Become Partner', gradient: 'accent' as const },
-    { to: '/communities', icon: Users, label: 'Communities', gradient: 'info' as const },
-    { to: '/events', icon: Calendar, label: 'Events', gradient: 'warning' as const },
-    { to: '/wallet', icon: Wallet, label: 'Wallet', gradient: 'primary' as const },
-    { to: '/profile', icon: Shield, label: 'Profile', gradient: 'accent' as const },
+  const getGreeting = () => {
+    const hour = new Date().getHours()
+    if (hour < 12) return 'Good morning'
+    if (hour < 17) return 'Good afternoon'
+    return 'Good evening'
+  }
+
+  const quickStats = [
+    { label: 'Wallet', value: `₹${walletBalance.toLocaleString('en-IN')}`, icon: Wallet, color: 'from-primary-500 to-primary-600' },
+    { label: 'Friends', value: stats.friends, icon: Users, color: 'from-sky-500 to-blue-600' },
+    { label: 'Communities', value: stats.communities, icon: Heart, color: 'from-pink-500 to-rose-600' },
+    { label: 'Events', value: stats.events, icon: Calendar, color: 'from-amber-500 to-orange-600' },
+    { label: 'Bookings', value: stats.bookings, icon: Footprints, color: 'from-emerald-500 to-emerald-600' },
+  ]
+
+  const features = [
+    { to: '/bookings/create', icon: Footprints, label: 'Book Service', desc: 'Walking or CarryBuddy', gradient: 'from-emerald-500 to-emerald-600' },
+    { to: '/communities', icon: Users, label: 'Communities', desc: 'Join local groups', gradient: 'from-sky-500 to-blue-600' },
+    { to: '/events', icon: Calendar, label: 'Events', desc: 'Upcoming activities', gradient: 'from-violet-500 to-purple-600' },
+    { to: '/messages', icon: MessageCircle, label: 'Chat', desc: 'Send a message', gradient: 'from-primary-500 to-accent-600' },
+    { to: '/notifications', icon: Heart, label: 'Alerts', desc: 'Notifications & updates', gradient: 'from-pink-500 to-rose-600' },
   ]
 
   if (loading) {
     return (
-      <div className="space-y-6 animate-fadeIn">
+      <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <div className="skeleton h-8 w-48 rounded-lg" />
-            <div className="skeleton h-4 w-32 mt-2 rounded-md" />
+            <div className="skeleton h-8 w-56 rounded-2xl" />
+            <div className="skeleton h-4 w-36 mt-2 rounded-xl" />
           </div>
-          <div className="skeleton h-12 w-12 rounded-2xl" />
+          <div className="skeleton h-14 w-14 rounded-2xl" />
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="glass-card p-5">
-              <div className="skeleton h-4 w-20 rounded-md" />
-              <div className="skeleton h-8 w-16 mt-3 rounded-md" />
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="glass-card-static p-5">
+              <div className="skeleton h-4 w-20 rounded-xl" />
+              <div className="skeleton h-8 w-16 mt-3 rounded-xl" />
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2 glass-card p-6">
-            <div className="skeleton h-6 w-32 rounded-md" />
-            <div className="space-y-4 mt-4">
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="skeleton h-16 w-full rounded-xl" />
-              ))}
+        <div className="grid grid-cols-3 lg:grid-cols-6 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="glass-card-static p-5">
+              <div className="skeleton h-12 w-12 rounded-2xl mx-auto" />
+              <div className="skeleton h-4 w-20 mx-auto mt-3 rounded-xl" />
             </div>
-          </div>
-          <div className="glass-card p-6">
-            <div className="skeleton h-6 w-24 rounded-md" />
-            <div className="space-y-3 mt-4">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="skeleton h-10 w-full rounded-lg" />
-              ))}
-            </div>
-          </div>
+          ))}
         </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="empty-state animate-fadeIn">
-        <AlertTriangle className="w-16 h-16 text-red-400" />
-        <h3 className="text-lg font-semibold text-surface-700 dark:text-surface-300 mt-4">
-          Something went wrong
-        </h3>
-        <p className="text-surface-500 dark:text-surface-400 mt-2">{error}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="btn-primary mt-4"
-        >
-          Retry
-        </button>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6 animate-fadeIn">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-surface-900 dark:text-white">
-            Welcome back{user?.name ? `, ${user.name.split(' ')[0]}` : ''} 👋
-          </h1>
-          <p className="text-surface-500 dark:text-surface-400 mt-1">
-            Here's what's happening with your account
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <TrustScoreDisplay score={trustScore} size="sm" />
-          {data.profile?.verificationStatus && (
-            <VerificationBadge
-              status={data.profile.verificationStatus as VerificationStatus}
-              size="sm"
-            />
-          )}
-        </div>
-      </div>
+    <div className="space-y-6 sm:space-y-8">
+      {/* Hero Greeting */}
+      <AnimatedPage>
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary-600 via-primary-500 to-accent-500 p-6 sm:p-8 text-white shadow-xl shadow-primary-500/20">
+          <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2230%22%20height%3D%2230%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cdefs%3E%3Cpattern%20id%3D%22g%22%20width%3D%2230%22%20height%3D%2230%22%20patternUnits%3D%22userSpaceOnUse%22%3E%3Ccircle%20cx%3D%2215%22%20cy%3D%2215%22%20r%3D%221%22%20fill%3D%22rgba(255,255,255,0.08)%22/%3E%3C/pattern%3E%3C/defs%3E%3Crect%20width%3D%22100%25%22%20height%3D%22100%25%22%20fill%3D%22url(%23g)%22/%3E%3C/svg%3E')] opacity-50" />
+          <div className="absolute -top-20 -right-20 w-60 h-60 bg-white/10 rounded-full blur-3xl" />
+          <div className="absolute -bottom-20 -left-20 w-60 h-60 bg-accent-500/20 rounded-full blur-3xl" />
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Trust Score"
-          value={`${trustScore}/100`}
-          icon={<Shield className="w-6 h-6" />}
-          gradient="primary"
-          change={trustScore >= 80 ? 'Excellent' : trustScore >= 60 ? 'Good' : 'Needs work'}
-          changeType={trustScore >= 80 ? 'positive' : trustScore >= 60 ? 'neutral' : 'negative'}
-        />
-        <StatCard
-          title="Wallet Balance"
-          value={`₹${walletBalance.toLocaleString('en-IN')}`}
-          icon={<Wallet className="w-6 h-6" />}
-          gradient="accent"
-        />
-        <StatCard
-          title="Unread Messages"
-          value={unreadMessages}
-          icon={<MessageSquare className="w-6 h-6" />}
-          gradient="info"
-          change={unreadMessages > 0 ? `${unreadMessages} new` : 'All caught up'}
-          changeType={unreadMessages > 0 ? 'positive' : 'neutral'}
-        />
-        <StatCard
-          title="Active Walks"
-          value={walkingRequestCount}
-          icon={<Footprints className="w-6 h-6" />}
-          gradient="success"
-          change={walkingRequestCount > 0 ? 'Active' : 'None active'}
-          changeType={walkingRequestCount > 0 ? 'positive' : 'neutral'}
-        />
-      </div>
+          <div className="relative z-10">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <p className="text-white/70 text-sm font-medium mb-1">{getGreeting()}</p>
+                <h1 className="text-2xl sm:text-3xl font-bold font-display tracking-tight">{userName}</h1>
+                <p className="text-white/60 text-sm mt-1">Here's what's happening today</p>
+              </div>
+              <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-xl font-bold ring-2 ring-white/30">
+                {userName.charAt(0).toUpperCase()}
+              </div>
+            </div>
 
-      {/* Secondary Stats */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard
-          title="Communities"
-          value={communityCount}
-          icon={<Users className="w-6 h-6" />}
-          gradient="warning"
-        />
-        <StatCard
-          title="Events"
-          value={eventCount}
-          icon={<Calendar className="w-6 h-6" />}
-          gradient="accent"
-        />
-        <StatCard
-          title="Messages"
-          value={unreadMessages}
-          icon={<MessageSquare className="w-6 h-6" />}
-          gradient="info"
-        />
-      </div>
-
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Recent Activity */}
-        <div className="lg:col-span-2 glass-card p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold text-surface-900 dark:text-white flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-primary-500" />
-              Recent Activity
-            </h2>
-            <Link
-              to="/profile"
-              className="text-sm text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1"
-            >
-              View all <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+            {/* Quick Stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-6">
+              {quickStats.map((stat) => (
+                <div key={stat.label} className="bg-white/10 backdrop-blur-sm rounded-2xl p-3.5 border border-white/10">
+                  <div className="flex items-center gap-2 mb-2">
+                    <stat.icon className="w-3.5 h-3.5 text-white/60" />
+                    <span className="text-[10px] font-medium text-white/60 uppercase tracking-wider">{stat.label}</span>
+                  </div>
+                  <p className="text-lg font-bold">{stat.value}</p>
+                </div>
+              ))}
+            </div>
           </div>
-
-          {walkingRequestCount === 0 && communityCount === 0 && eventCount === 0 ? (
-            <div className="empty-state py-8">
-              <Compass className="w-12 h-12 text-surface-400" />
-              <h3 className="text-base font-medium text-surface-600 dark:text-surface-400 mt-3">
-                No recent activity
-              </h3>
-              <p className="text-sm text-surface-500 dark:text-surface-500 mt-1">
-                Start exploring to see activity here
-              </p>
-              <Link to="/walking-requests" className="btn-primary mt-4 text-sm">
-                Explore Walking Requests
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              {walkingRequestCount > 0 && (
-                <Link
-                  to="/walking-requests"
-                  className="flex items-center gap-4 p-4 rounded-xl hover:bg-surface-100 dark:hover:bg-surface-800/50 transition-colors group"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
-                    <Footprints className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-surface-900 dark:text-white">
-                      {walkingRequestCount} active walking request{walkingRequestCount !== 1 ? 's' : ''}
-                    </p>
-                    <p className="text-xs text-surface-500 dark:text-surface-400 mt-0.5">
-                      View and manage your walking requests
-                    </p>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-surface-400 group-hover:text-primary-500 transition-colors" />
-                </div>
-              )}
-              {communityCount > 0 && (
-                <div
-                  className="flex items-center gap-4 p-4 rounded-xl hover:bg-surface-100 dark:hover:bg-surface-800/50 transition-all group"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-sky-500/10 flex items-center justify-center flex-shrink-0">
-                    <Users className="w-5 h-5 text-sky-600 dark:text-sky-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-surface-900 dark:text-white">
-                      {communityCount} communit{communityCount === 1 ? 'y' : 'ies'} joined
-                    </p>
-                    <p className="text-xs text-surface-500 dark:text-surface-400 mt-0.5">
-                      Connect with like-minded people
-                    </p>
-                  </div>
-                  <Link to="/communities">
-                    <ArrowRight className="w-4 h-4 text-surface-400 group-hover:text-primary-500 transition-colors" />
-                  </Link>
-                </div>
-              )}
-              {eventCount > 0 && (
-                <div className="flex items-center gap-4 p-4 rounded-xl hover:bg-surface-100 dark:hover:bg-surface-800/50 transition-all group">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center flex-shrink-0">
-                    <Calendar className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-surface-900 dark:text-white">
-                      {eventCount} upcoming event{eventCount !== 1 ? 's' : ''}
-                    </p>
-                    <p className="text-xs text-surface-500 dark:text-surface-400 mt-0.5">
-                      Don't miss out on local events
-                    </p>
-                  </div>
-                  <Link to="/events">
-                    <ArrowRight className="w-4 h-4 text-surface-400 group-hover:text-primary-500 transition-colors" />
-                  </Link>
-                </div>
-              )}
-            </div>
-          )}
         </div>
+      </AnimatedPage>
 
-        {/* Quick Actions */}
-        <div className="glass-card p-6">
-          <h2 className="text-lg font-semibold text-surface-900 dark:text-white mb-4 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-accent-500" />
-            Quick Actions
-          </h2>
-          <div className="space-y-2">
-            {quickActions.map((action) => (
+      {/* Feature Grid */}
+      <AnimatedPage delay={100}>
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="section-title">Quick Actions</h2>
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {features.map((feature) => (
               <Link
-                key={action.to}
-                to={action.to}
-                className="flex items-center gap-3 p-3 rounded-xl hover:bg-surface-100 dark:hover:bg-surface-800/50 transition-all group"
+                key={feature.to}
+                to={feature.to}
+                className="group glass-card-static p-4 text-center hover:-translate-y-1 transition-all duration-300"
               >
-                <div
-                  className={`w-9 h-9 rounded-lg bg-gradient-to-br from-${action.color}-500/20 to-${action.color}-600/10 flex items-center justify-center group-hover:scale-110 transition-transform`}
-                >
-                  <action.icon className={`w-4.5 h-4.5 text-${action.color}-600 dark:text-${action.color}-400`} />
+                <div className={`w-12 h-12 mx-auto rounded-2xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-3 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                  <feature.icon className="w-5 h-5 text-white" />
                 </div>
-                <span className="text-sm font-medium text-surface-700 dark:text-surface-300 flex-1">
-                  {action.label}
-                </span>
-                <ArrowRight className="w-4 h-4 text-surface-400 group-hover:text-primary-500 group-hover:translate-x-0.5 transition-all" />
+                <p className="text-xs sm:text-sm font-bold text-surface-900 dark:text-surface-100">{feature.label}</p>
+                <p className="text-[10px] sm:text-xs text-surface-500 dark:text-surface-400 mt-0.5 hidden sm:block">{feature.desc}</p>
               </Link>
             ))}
           </div>
         </div>
+      </AnimatedPage>
+
+      {/* Activity Feed + Sidebar */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Activity Feed */}
+        <AnimatedPage delay={200} className="lg:col-span-2">
+          <GlassCard variant="elevated" padding="lg">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="section-title flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-primary-500" />
+                Activity Feed
+              </h2>
+              <Link to="/profile" className="text-sm font-medium text-primary-600 dark:text-primary-400 hover:text-primary-500 flex items-center gap-1 transition-colors">
+                View all <ChevronRight className="w-4 h-4" />
+              </Link>
+            </div>
+
+            <div className="space-y-2">
+              {stats.bookings > 0 && (
+                <Link to="/walking-requests" className="flex items-center gap-4 p-4 rounded-2xl hover:bg-surface-100 dark:hover:bg-surface-800/50 transition-all group">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-md shadow-emerald-500/20 group-hover:scale-110 transition-transform">
+                    <Footprints className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-surface-900 dark:text-white">{stats.bookings} active booking{stats.bookings !== 1 ? 's' : ''}</p>
+                    <p className="text-xs text-surface-500 dark:text-surface-400 mt-0.5">View and manage your requests</p>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-surface-400 group-hover:text-primary-500 transition-colors" />
+                </Link>
+              )}
+              {stats.communities > 0 && (
+                <Link to="/communities" className="flex items-center gap-4 p-4 rounded-2xl hover:bg-surface-100 dark:hover:bg-surface-800/50 transition-all group">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center shadow-md shadow-sky-500/20 group-hover:scale-110 transition-transform">
+                    <Users className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-surface-900 dark:text-white">{stats.communities} communit{stats.communities === 1 ? 'y' : 'ies'} joined</p>
+                    <p className="text-xs text-surface-500 dark:text-surface-400 mt-0.5">Connect with like-minded people</p>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-surface-400 group-hover:text-primary-500 transition-colors" />
+                </Link>
+              )}
+              {stats.events > 0 && (
+                <Link to="/events" className="flex items-center gap-4 p-4 rounded-2xl hover:bg-surface-100 dark:hover:bg-surface-800/50 transition-all group">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-md shadow-amber-500/20 group-hover:scale-110 transition-transform">
+                    <Calendar className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-surface-900 dark:text-white">{stats.events} upcoming event{stats.events !== 1 ? 's' : ''}</p>
+                    <p className="text-xs text-surface-500 dark:text-surface-400 mt-0.5">Don't miss out on local events</p>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-surface-400 group-hover:text-primary-500 transition-colors" />
+                </Link>
+              )}
+              {stats.bookings === 0 && stats.communities === 0 && stats.events === 0 && (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 mx-auto rounded-2xl bg-surface-100 dark:bg-surface-800 flex items-center justify-center mb-4">
+                    <Home className="w-8 h-8 text-surface-400" />
+                  </div>
+                  <h3 className="font-bold text-surface-900 dark:text-surface-100 mb-1 font-display">Welcome to RentBuddy</h3>
+                  <p className="text-sm text-surface-500 dark:text-surface-400 mb-5">Start exploring to see your activity here</p>
+                  <Link to="/walking-requests" className="btn-primary btn-sm">
+                    <Footprints className="w-4 h-4" />
+                    Explore Walks
+                  </Link>
+                </div>
+              )}
+            </div>
+          </GlassCard>
+        </AnimatedPage>
+
+        {/* Sidebar */}
+        <AnimatedPage delay={300}>
+          <div className="space-y-6">
+            {/* Wallet Card */}
+            <GlassCard variant="elevated" padding="lg" className="bg-gradient-to-br from-primary-600 to-primary-700 text-white border-0">
+              <div className="flex items-center gap-2 mb-4">
+                <Wallet className="w-5 h-5 text-white/80" />
+                <span className="text-sm font-medium text-white/80">Wallet Balance</span>
+              </div>
+              <p className="text-3xl font-bold font-display">₹{walletBalance.toLocaleString('en-IN')}</p>
+              <div className="flex gap-2 mt-4">
+                <Link to="/wallet/withdraw" className="flex-1 text-center py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-xs font-semibold transition-colors">
+                  Withdraw
+                </Link>
+                <Link to="/wallet/transactions" className="flex-1 text-center py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-xs font-semibold transition-colors">
+                  History
+                </Link>
+              </div>
+            </GlassCard>
+
+            {/* Messages Shortcut */}
+            <GlassCard variant="elevated" padding="lg">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold font-display text-surface-900 dark:text-surface-100 flex items-center gap-2">
+                  <MessageCircle className="w-4 h-4 text-primary-500" />
+                  Messages
+                </h3>
+                {stats.unreadMessages > 0 && (
+                  <span className="px-2.5 py-0.5 rounded-full bg-primary-500/10 text-primary-600 dark:text-primary-400 text-xs font-semibold">
+                    {stats.unreadMessages} new
+                  </span>
+                )}
+              </div>
+              <Link to="/messages" className="btn-outline w-full btn-sm">
+                {stats.unreadMessages > 0 ? 'View Unread Messages' : 'Open Messages'}
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </GlassCard>
+
+            {/* Quick Links */}
+            <GlassCard variant="elevated" padding="lg">
+              <h3 className="font-bold font-display text-surface-900 dark:text-surface-100 mb-4">Quick Links</h3>
+              <div className="space-y-2">
+                {[
+                  { to: '/profile', icon: Star, label: 'My Profile' },
+                  { to: '/walking-requests', icon: MapPin, label: 'Nearby Walks' },
+                  { to: '/events', icon: Calendar, label: 'Browse Events' },
+                ].map((link) => (
+                  <Link key={link.to} to={link.to} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors group">
+                    <link.icon className="w-4 h-4 text-surface-400 group-hover:text-primary-500 transition-colors" />
+                    <span className="text-sm font-medium text-surface-700 dark:text-surface-300">{link.label}</span>
+                    <ChevronRight className="w-3.5 h-3.5 text-surface-400 ml-auto group-hover:text-primary-500 transition-colors" />
+                  </Link>
+                ))}
+              </div>
+            </GlassCard>
+          </div>
+        </AnimatedPage>
       </div>
     </div>
   )

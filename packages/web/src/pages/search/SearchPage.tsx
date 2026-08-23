@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { Search, Users, Calendar, MessageCircle, Footprints, Sparkles, X, Clock } from 'lucide-react'
+import { Search, Users, Calendar, MessageCircle, Footprints, Sparkles, X, Clock, ChevronLeft, ChevronRight } from 'lucide-react'
 import { api } from '../../lib/api'
 import { AnimatedPage } from '../../components/AnimatedPage'
 import { PageHeader } from '../../components/PageHeader'
@@ -24,30 +24,49 @@ interface TrendingData {
   events: Array<{ id: number; name: string; date: string }>
 }
 
+interface PaginationData {
+  results: SearchResult[]
+  total: number
+  page: number
+  limit: number
+  pages: number
+}
+
 export function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const query = searchParams.get('q') || ''
   const filter = searchParams.get('filter') || 'all'
+  const page = Number(searchParams.get('page')) || 1
+  const limit = Number(searchParams.get('limit')) || 20
 
   const [localQuery, setLocalQuery] = useState(query)
   const [results, setResults] = useState<SearchResult[]>([])
+  const [paginationData, setPaginationData] = useState<PaginationData | null>(null)
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [trending, setTrending] = useState<TrendingData | null>(null)
   const [showSuggestions, setShowSuggestions] = useState(false)
 
-  // Fetch search results
+  // Fetch search results with pagination
   const { loading: searchLoading, error: searchError, retry: retrySearch } = useAsync(
     async () => {
       if (!query || query.length < 2) {
         setResults([])
-        return []
+        setPaginationData(null)
+        return null
       }
       const res = await api.get('/search', {
-        params: { q: query, filter, limit: 50 }
+        params: { q: query, filter, page, limit }
       })
-      const data = res.data?.data?.results || []
-      setResults(data)
+      const data = res.data?.data || {}
+      setResults(data.results || [])
+      setPaginationData({
+        results: data.results || [],
+        total: data.total || 0,
+        page: data.page || 1,
+        limit: data.limit || limit,
+        pages: data.pages || 0
+      })
       return data
     },
     !!query,
@@ -88,29 +107,40 @@ export function SearchPage() {
     return () => clearTimeout(timer)
   }, [localQuery])
 
-  // Trigger search when query changes
+  // Trigger search when query/filter/page changes
   useEffect(() => {
     if (query && query.length >= 2) {
       retrySearch()
+      window.scrollTo({ top: 0, behavior: 'smooth' })
     }
-  }, [query, filter])
+  }, [query, filter, page])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     if (localQuery.length >= 2) {
-      setSearchParams({ q: localQuery, filter })
+      setSearchParams({ q: localQuery, filter, page: '1', limit: String(limit) })
       setShowSuggestions(false)
     }
   }
 
   const handleSuggestionClick = (suggestion: string) => {
     setLocalQuery(suggestion)
-    setSearchParams({ q: suggestion, filter })
+    setSearchParams({ q: suggestion, filter, page: '1', limit: String(limit) })
     setShowSuggestions(false)
   }
 
   const handleFilterChange = (newFilter: string) => {
-    setSearchParams({ q: query, filter: newFilter })
+    setSearchParams({ q: query, filter: newFilter, page: '1', limit: String(limit) })
+  }
+
+  const handleLimitChange = (newLimit: number) => {
+    setSearchParams({ q: query, filter, page: '1', limit: String(newLimit) })
+  }
+
+  const handlePageChange = (newPage: number) => {
+    if (paginationData && newPage >= 1 && newPage <= paginationData.pages) {
+      setSearchParams({ q: query, filter, page: String(newPage), limit: String(limit) })
+    }
   }
 
   const handleClearSearch = () => {
@@ -118,6 +148,7 @@ export function SearchPage() {
     setResults([])
     setSuggestions([])
     setShowSuggestions(false)
+    setPaginationData(null)
     setSearchParams({})
     navigate('/search')
   }
@@ -147,7 +178,7 @@ export function SearchPage() {
     <div className="space-y-6">
       <PageHeader 
         title={query ? `Search Results for "${query}"` : 'Search'} 
-        subtitle={query ? `Found ${results.length} result${results.length !== 1 ? 's' : ''}` : 'Find users, events, communities, and more'} 
+        subtitle={query ? `Found ${paginationData?.total || 0} result${(paginationData?.total || 0) !== 1 ? 's' : ''}` : 'Find users, events, communities, and more'} 
       />
 
       <AnimatedPage delay={50}>
@@ -226,7 +257,7 @@ export function SearchPage() {
                 description="Please check your connection and try again"
                 action={<button onClick={retrySearch} className="btn btn-primary btn-sm">Retry</button>}
               />
-            ) : results.length === 0 ? (
+            ) : !results || results.length === 0 ? (
               <EmptyState
                 icon={Search}
                 title="No results found"
@@ -234,48 +265,123 @@ export function SearchPage() {
                 action={<button onClick={handleClearSearch} className="btn btn-primary btn-sm">Clear Search</button>}
               />
             ) : (
-              <div className="space-y-3">
-                {results.map((result) => (
-                  <a
-                    key={`${result.type}-${result.id}`}
-                    href={result.link}
-                    className="glass-card p-4 flex items-start gap-4 group hover:-translate-y-0.5 transition-all duration-300 block"
-                  >
-                    {/* Icon */}
-                    <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-surface-100 dark:bg-surface-800 flex items-center justify-center text-surface-600 dark:text-surface-400 group-hover:scale-110 transition-transform">
-                      {result.imageUrl ? (
-                        <img src={result.imageUrl} alt={result.title} className="w-full h-full rounded-xl object-cover" />
-                      ) : (
-                        getResultIcon(result.type)
-                      )}
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <h3 className="font-bold text-surface-900 dark:text-white truncate">
-                          {result.title}
-                        </h3>
-                        <span className="text-[10px] px-2 py-1 rounded-full bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 flex-shrink-0 font-medium">
-                          {getResultTypeLabel(result.type)}
-                        </span>
+              <>
+                <div className="space-y-3">
+                  {results.map((result) => (
+                    <a
+                      key={`${result.type}-${result.id}`}
+                      href={result.link}
+                      className="glass-card p-4 flex items-start gap-4 group hover:-translate-y-0.5 transition-all duration-300 block"
+                    >
+                      {/* Icon */}
+                      <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-surface-100 dark:bg-surface-800 flex items-center justify-center text-surface-600 dark:text-surface-400 group-hover:scale-110 transition-transform">
+                        {result.imageUrl ? (
+                          <img src={result.imageUrl} alt={result.title} className="w-full h-full rounded-xl object-cover" />
+                        ) : (
+                          getResultIcon(result.type)
+                        )}
                       </div>
 
-                      {result.subtitle && (
-                        <p className="text-sm text-surface-500 dark:text-surface-400 truncate mb-1">
-                          {result.subtitle}
-                        </p>
-                      )}
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <h3 className="font-bold text-surface-900 dark:text-white truncate">
+                            {result.title}
+                          </h3>
+                          <span className="text-[10px] px-2 py-1 rounded-full bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 flex-shrink-0 font-medium">
+                            {getResultTypeLabel(result.type)}
+                          </span>
+                        </div>
 
-                      {result.description && (
-                        <p className="text-sm text-surface-600 dark:text-surface-300 line-clamp-2">
-                          {result.description}
-                        </p>
-                      )}
+                        {result.subtitle && (
+                          <p className="text-sm text-surface-500 dark:text-surface-400 truncate mb-1">
+                            {result.subtitle}
+                          </p>
+                        )}
+
+                        {result.description && (
+                          <p className="text-sm text-surface-600 dark:text-surface-300 line-clamp-2">
+                            {result.description}
+                          </p>
+                        )}
+                      </div>
+                    </a>
+                  ))}
+                </div>
+
+                {/* Pagination */}
+                {paginationData && paginationData.pages > 1 && (
+                  <div className="mt-8 pt-6 border-t border-surface-200 dark:border-surface-700 space-y-4">
+                    {/* Results per page */}
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-surface-600 dark:text-surface-400">
+                        Showing {((paginationData.page - 1) * paginationData.limit) + 1}-{Math.min(paginationData.page * paginationData.limit, paginationData.total)} of {paginationData.total}
+                      </p>
+                      <div className="flex gap-2">
+                        {[10, 20, 50].map(size => (
+                          <button
+                            key={size}
+                            onClick={() => handleLimitChange(size)}
+                            className={`px-3 py-1 text-xs font-medium rounded-lg transition-all ${
+                              limit === size
+                                ? 'bg-primary-600 text-white'
+                                : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 hover:bg-surface-200'
+                            }`}
+                          >
+                            {size}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </a>
-                ))}
-              </div>
+
+                    {/* Pagination buttons */}
+                    <div className="flex items-center justify-between gap-2">
+                      <button
+                        onClick={() => handlePageChange(page - 1)}
+                        disabled={page <= 1}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 hover:bg-surface-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                        <span className="text-sm">Previous</span>
+                      </button>
+
+                      {/* Page indicators */}
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.min(5, paginationData.pages) }, (_, i) => {
+                          let pageNum = page + i - 2
+                          if (pageNum < 1) pageNum = 1 + i
+                          if (pageNum > paginationData.pages) pageNum = paginationData.pages - 4 + i
+                          
+                          return (
+                            pageNum > 0 && pageNum <= paginationData.pages && (
+                              <button
+                                key={pageNum}
+                                onClick={() => handlePageChange(pageNum)}
+                                className={`w-8 h-8 rounded-lg text-sm font-medium transition-all ${
+                                  pageNum === page
+                                    ? 'bg-primary-600 text-white'
+                                    : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 hover:bg-surface-200'
+                                }`}
+                              >
+                                {pageNum}
+                              </button>
+                            )
+                          )
+                        })}
+                      </div>
+
+                      <button
+                        onClick={() => handlePageChange(page + 1)}
+                        disabled={page >= paginationData.pages}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 hover:bg-surface-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      >
+                        <span className="text-sm">Next</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </>
         ) : (

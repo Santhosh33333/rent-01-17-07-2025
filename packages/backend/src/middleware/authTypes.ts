@@ -1,9 +1,19 @@
 import { Request } from "express";
 
+export type UserRole =
+  | "USER"
+  | "PARTNER"
+  | "MODERATOR"
+  | "SUPPORT"
+  | "FINANCE"
+  | "SUPER_ADMIN"
+  | "ADMIN";
+
 export interface AuthenticatedUser {
   userId: string;
   email: string;
-  role?: "USER" | "WALKING_PARTNER" | "ADMIN" | "SUPER_ADMIN" | "MODERATOR" | "SUPPORT" | "FINANCE";
+  role?: UserRole;
+  activeRole?: UserRole;
 }
 
 export interface AuthedRequest extends Request {

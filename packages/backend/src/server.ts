@@ -2,38 +2,53 @@ import "dotenv/config";
 import { createApp } from "./app";
 import { env } from "./config/env";
 import { prisma, testConnection, disconnect } from "./config/database";
+import { setupChat } from "./services/chatService";
+import { initializeFirebase } from "./services/notificationService";
+import { initializeFirebaseAuth } from "./services/firebaseAuthService";
+import { initializeSocket } from "./services/socketService";
 
 async function main(): Promise<void> {
-  let dbAvailable = false
+  let dbAvailable = false;
   try {
-    await testConnection()
-    dbAvailable = true
-    console.log("Database connection established.")
+    await testConnection();
+    dbAvailable = true;
+    console.log("Database connection established.");
   } catch (err) {
-    console.warn("Database connection failed. Starting server without DB. API routes will return 503.", err)
+    console.warn("Database connection failed. Starting server without DB. API routes will return 503.", err);
   }
 
-  const app = createApp()
-  const server = app.listen(env.PORT, () => {
-    console.log(`RentBuddy API server listening on port ${env.PORT} [${env.NODE_ENV}]${dbAvailable ? "" : " (no DB)"}`)
-  })
+  initializeFirebase();
+  initializeFirebaseAuth();
+
+  const server = createApp();
+
+  const io = initializeSocket(server);
+
+  setupChat(io);
+
+  server.listen(env.PORT, () => {
+    console.log(`RentBuddy API server listening on port ${env.PORT} [${env.NODE_ENV}]${dbAvailable ? "" : " (no DB)"}`);
+  });
 
   const shutdown = async (signal: string): Promise<void> => {
-    console.log(`\nReceived ${signal}. Shutting down gracefully...`)
+    console.log(`\nReceived ${signal}. Shutting down gracefully...`);
     server.close(() => {
-      console.log("HTTP server closed.")
-    })
+      console.log("HTTP server closed.");
+    });
+    io.close(() => {
+      console.log("Socket.IO server closed.");
+    });
     try {
-      await disconnect()
-      console.log("Database disconnected.")
+      await disconnect();
+      console.log("Database disconnected.");
     } catch (err) {
-      console.error("Error during shutdown:", err)
+      console.error("Error during shutdown:", err);
     }
-    process.exit(0)
-  }
+    process.exit(0);
+  };
 
-  process.on("SIGINT", () => void shutdown("SIGINT"))
-  process.on("SIGTERM", () => void shutdown("SIGTERM"))
+  process.on("SIGINT", () => void shutdown("SIGINT"));
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
 }
 
 process.on("unhandledRejection", (reason) => {

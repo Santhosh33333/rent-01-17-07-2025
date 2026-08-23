@@ -1,9 +1,10 @@
 import { lazy, Suspense } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { Layout } from './components/Layout'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { ThemeProvider } from './lib/themeContext'
 
 // Lazy-loaded auth pages
 const LoginPage = lazy(() => import('./pages/auth/LoginPage').then(m => ({ default: m.LoginPage })))
@@ -55,6 +56,7 @@ const AdminPartnersPage = lazy(() => import('./pages/admin/AdminWalkingPartnersP
 const AdminWithdrawalsPage = lazy(() => import('./pages/admin/AdminWithdrawalsPage').then(m => ({ default: m.AdminWithdrawalsPage })))
 const AdminReportsPage = lazy(() => import('./pages/admin/AdminReportsPage').then(m => ({ default: m.AdminReportsPage })))
 const AdminAuditLogsPage = lazy(() => import('./pages/admin/AdminAuditLogsPage').then(m => ({ default: m.AdminAuditLogsPage })))
+const AdminPaymentsPage = lazy(() => import('./pages/admin/AdminDashboardPage').then(m => ({ default: m.AdminDashboardPage })))
 
 // Settings pages
 const SettingsPage = lazy(() => import('./pages/settings/SettingsPage').then(m => ({ default: m.SettingsPage })))
@@ -68,7 +70,8 @@ const WithdrawalPage = lazy(() => import('./pages/wallet/WithdrawalPage').then(m
 
 // New pages
 const HomePage = lazy(() => import('./pages/home/HomePage').then(m => ({ default: m.HomePage })))
-const DiscoverPage = lazy(() => import('./pages/home/DiscoverPage').then(m => ({ default: m.DiscoverPage })))
+const DiscoverPage = lazy(() => import('./pages/discovery/DiscoveryHubPage').then(m => ({ default: m.DiscoveryHubPage })))
+const DiscoveryCategoryPage = lazy(() => import('./components/DiscoveryCategoryPage').then(m => ({ default: m.DiscoveryCategoryPage })))
 const BookingsListPage = lazy(() => import('./pages/bookings/BookingsListPage').then(m => ({ default: m.BookingsListPage })))
 const CreateBookingPage = lazy(() => import('./pages/bookings/CreateBookingPage').then(m => ({ default: m.CreateBookingPage })))
 const BookingDetailPage = lazy(() => import('./pages/bookings/BookingDetailPage').then(m => ({ default: m.BookingDetailPage })))
@@ -88,12 +91,18 @@ function LoadingSpinner() {
   )
 }
 
+function DiscoveryCategoryRoute() {
+  const { categoryKey } = useParams()
+  return <DiscoveryCategoryPage categoryKey={(categoryKey || 'dating') as any} />
+}
+
 export function App() {
   return (
-    <ErrorBoundary>
-      <Toaster position="top-center" toastOptions={{ duration: 3000, style: { background: '#18181b', color: '#fafafa', borderRadius: '16px' } }} />
-      <Suspense fallback={<LoadingSpinner />}>
-        <Routes>
+    <ThemeProvider>
+      <ErrorBoundary>
+        <Toaster position="top-center" toastOptions={{ duration: 3000, style: { background: '#18181b', color: '#fafafa', borderRadius: '16px' } }} />
+        <Suspense fallback={<LoadingSpinner />}>
+          <Routes>
           <Route path="/" element={<SplashPage />} />
           <Route path="/onboarding" element={<OnboardingPage />} />
           <Route path="/login" element={<LoginPage />} />
@@ -102,7 +111,7 @@ export function App() {
           <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/verify-mobile" element={<VerifyMobilePage />} />
 
-          <Route element={<ProtectedRoute />}>
+          <Route element={<ProtectedRoute allowedRoles={['USER']} />}>
             <Route element={<Layout />}>
               <Route path="/profile/complete" element={<ProfileCompletionPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
@@ -121,9 +130,11 @@ export function App() {
               <Route path="/wallet/topup" element={<TopUpPage />} />
               <Route path="/wallet/withdraw" element={<WithdrawalPage />} />
               <Route path="/wallet/transactions" element={<TransactionHistoryPage />} />
+              <Route path="/wallet/history" element={<TransactionHistoryPage />} />
               {/* New Home & Discovery */}
               <Route path="/home" element={<HomePage />} />
               <Route path="/discover" element={<DiscoverPage />} />
+              <Route path="/discover/:categoryKey" element={<DiscoveryCategoryRoute />} />
 
               {/* New Booking System */}
               <Route path="/bookings" element={<BookingsListPage />} />
@@ -132,14 +143,6 @@ export function App() {
               <Route path="/bookings/:id/payment" element={<BookingPaymentPage />} />
               <Route path="/bookings/:id/tracking" element={<BookingTrackingPage />} />
               <Route path="/bookings/:id/rate" element={<RatingPage />} />
-
-              {/* Unified Partner Pages */}
-              <Route path="/partner/dashboard" element={<PartnerDashboardPage />} />
-              <Route path="/partner/jobs" element={<PartnerJobsPage />} />
-              <Route path="/partner/map" element={<PartnerMapPage />} />
-              <Route path="/partner/wallet" element={<PartnerWalletPage />} />
-              <Route path="/partner/performance" element={<PartnerPerformancePage />} />
-              <Route path="/partner/profile" element={<PartnerProfilePage />} />
 
               <Route path="/walking-requests" element={<WalkingRequestsPage />} />
               <Route path="/walking-requests/create" element={<CreateWalkingRequestPage />} />
@@ -155,20 +158,37 @@ export function App() {
               <Route path="/settings/privacy" element={<PrivacyPage />} />
               <Route path="/search" element={<SearchPage />} />
             </Route>
+          </Route>
 
-            <Route path="/admin/portal" element={<AdminPortalPage />} />
-            <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
-            <Route path="/admin/users" element={<AdminUsersPage />} />
-            <Route path="/admin/kyc" element={<AdminKycPage />} />
-            <Route path="/admin/partners" element={<AdminPartnersPage />} />
-            <Route path="/admin/withdrawals" element={<AdminWithdrawalsPage />} />
-            <Route path="/admin/reports" element={<AdminReportsPage />} />
-            <Route path="/admin/audit-logs" element={<AdminAuditLogsPage />} />
+          <Route element={<ProtectedRoute allowedRoles={['PARTNER']} />}>
+            <Route element={<Layout />}>
+              <Route path="/partner/dashboard" element={<PartnerDashboardPage />} />
+              <Route path="/partner/jobs" element={<PartnerJobsPage />} />
+              <Route path="/partner/map" element={<PartnerMapPage />} />
+              <Route path="/partner/wallet" element={<PartnerWalletPage />} />
+              <Route path="/partner/performance" element={<PartnerPerformancePage />} />
+              <Route path="/partner/profile" element={<PartnerProfilePage />} />
+            </Route>
+          </Route>
+
+          <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN', 'MODERATOR', 'SUPPORT', 'FINANCE']} />}>
+            <Route element={<Layout />}>
+              <Route path="/admin/portal" element={<AdminPortalPage />} />
+              <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+              <Route path="/admin/users" element={<AdminUsersPage />} />
+              <Route path="/admin/kyc" element={<AdminKycPage />} />
+              <Route path="/admin/partners" element={<AdminPartnersPage />} />
+              <Route path="/admin/withdrawals" element={<AdminWithdrawalsPage />} />
+              <Route path="/admin/reports" element={<AdminReportsPage />} />
+              <Route path="/admin/audit-logs" element={<AdminAuditLogsPage />} />
+              <Route path="/admin/payments" element={<AdminPaymentsPage />} />
+            </Route>
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-      </Suspense>
-    </ErrorBoundary>
+        </Suspense>
+      </ErrorBoundary>
+    </ThemeProvider>
   )
 }

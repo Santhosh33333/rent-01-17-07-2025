@@ -384,15 +384,15 @@ export async function getEarningsChart(req: AuthedRequest, res: Response): Promi
         count: 0,
       };
 
-      existing.earnings += d.amount;
-      existing.fees += d.platformFee + d.commissionDeduction;
-      existing.netAmount += d.netAmount;
+      existing.earnings += Number(d.amount);
+      existing.fees += Number(d.platformFee) + Number(d.commissionDeduction);
+      existing.netAmount += Number(d.netAmount);
       existing.count += 1;
       chartMap.set(dateKey, existing);
     });
 
     const chart = Array.from(chartMap.values());
-    const totalEarnings = details.reduce((s, d) => s + d.netAmount, 0);
+    const totalEarnings = details.reduce((s, d) => s + Number(d.netAmount), 0);
 
     sendSuccess(res, { chart, totalEarnings });
   } catch (err: any) {
