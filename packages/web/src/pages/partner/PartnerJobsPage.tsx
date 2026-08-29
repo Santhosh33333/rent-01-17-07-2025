@@ -13,12 +13,13 @@ import { EmptyState } from '../../components/EmptyState'
 interface Job {
   id: string
   serviceType: string
-  pickupLocation: string
-  dropLocation?: string
+  startLocation: string
+  endLocation?: string
   status: string
-  scheduledTime: string
-  estimatedEarning?: number
+  scheduledAt: string
+  partnerEarning?: number
   userName?: string
+  user?: { fullName?: string }
 }
 
 type TabType = 'available' | 'active' | 'completed'
@@ -47,8 +48,8 @@ export function PartnerJobsPage() {
         else if (activeTab === 'completed') endpoint = '/partner/bookings?status=COMPLETED'
 
         const res = await api.get(endpoint)
-        const raw = res.data?.data || res.data || []
-        setJobs(Array.isArray(raw) ? raw : [])
+        const raw = res.data?.data || res.data || {}
+        setJobs(Array.isArray(raw) ? raw : raw.items || [])
       } catch {
         toast.error('Failed to load jobs')
       } finally {
@@ -83,7 +84,7 @@ export function PartnerJobsPage() {
 
   const filtered = jobs.filter((j) => {
     const q = search.toLowerCase()
-    return !q || (j.pickupLocation || '').toLowerCase().includes(q) || (j.userName || '').toLowerCase().includes(q)
+    return !q || (j.startLocation || '').toLowerCase().includes(q) || (j.userName || j.user?.fullName || '').toLowerCase().includes(q)
   })
 
   const tabs: { key: TabType; label: string; icon: typeof ClipboardList }[] = [
@@ -166,21 +167,21 @@ export function PartnerJobsPage() {
                           {job.serviceType === 'WALKING' ? 'Walking Buddy' : 'CarryBuddy'}
                         </h3>
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
-                          <span className="flex items-center gap-1 text-xs text-surface-500"><MapPin className="w-3 h-3" /> {job.pickupLocation || 'Pickup'}</span>
-                          {job.dropLocation && <span className="flex items-center gap-1 text-xs text-surface-500"><Navigation className="w-3 h-3" /> {job.dropLocation}</span>}
+                          <span className="flex items-center gap-1 text-xs text-surface-500"><MapPin className="w-3 h-3" /> {job.startLocation || 'Pickup'}</span>
+                          {job.endLocation && job.endLocation !== job.startLocation && <span className="flex items-center gap-1 text-xs text-surface-500"><Navigation className="w-3 h-3" /> {job.endLocation}</span>}
                           <span className="flex items-center gap-1 text-xs text-surface-500">
                             <Clock className="w-3 h-3" />
-                            {job.scheduledTime ? new Date(job.scheduledTime).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'ASAP'}
+                            {job.scheduledAt ? new Date(job.scheduledAt).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'ASAP'}
                           </span>
                         </div>
-                        {job.userName && (
-                          <span className="flex items-center gap-1 text-xs text-surface-400 mt-1"><User className="w-3 h-3" /> {job.userName}</span>
+                        {(job.userName || job.user?.fullName) && (
+                          <span className="flex items-center gap-1 text-xs text-surface-400 mt-1"><User className="w-3 h-3" /> {job.userName || job.user?.fullName}</span>
                         )}
                       </div>
                     </div>
                     <div className="text-right flex flex-col items-end gap-2 flex-shrink-0">
-                      {job.estimatedEarning !== undefined && (
-                        <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">₹{job.estimatedEarning}</span>
+                      {job.partnerEarning !== undefined && (
+                        <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">₹{job.partnerEarning}</span>
                       )}
                       <span className={`text-[10px] px-2.5 py-1 rounded-full font-semibold ${statusConfig[job.status]?.badge || ''}`}>
                         {statusConfig[job.status]?.label || job.status}

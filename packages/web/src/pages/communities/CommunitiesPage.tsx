@@ -29,8 +29,9 @@ export function CommunitiesPage() {
     async () => {
       const res = await api.get('/communities')
       const data = res.data?.data || res.data || []
-      setList(Array.isArray(data) ? data : [])
-      return Array.isArray(data) ? data : []
+      const items = Array.isArray(data) ? data : (data.items || [])
+      setList(items)
+      return items
     },
     true
   )

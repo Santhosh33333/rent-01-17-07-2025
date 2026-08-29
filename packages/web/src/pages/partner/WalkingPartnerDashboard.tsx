@@ -19,13 +19,13 @@ interface DashboardStats {
 }
 
 interface WalkingRequest {
-  id: number
+  id: string
   type: string
-  pickupLocation: string
-  dropLocation: string
-  scheduledTime: string
-  price: number
-  status: 'open' | 'accepted' | 'in_progress' | 'completed' | 'cancelled'
+  startLocation: string
+  endLocation: string
+  startTime: string
+  fare: number
+  status: 'OPEN' | 'ACCEPTED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | string
   distance?: string
 }
 
@@ -56,8 +56,11 @@ export function WalkingPartnerDashboard() {
         }
         if (requestsRes.status === 'fulfilled') {
           const raw = requestsRes.value.data?.data || requestsRes.value.data || []
-          const arr: WalkingRequest[] = Array.isArray(raw) ? raw : []
-          setRecentRequests(arr.filter((r: WalkingRequest) => r.status === 'accepted' || r.status === 'in_progress').slice(0, 5))
+          const arr: WalkingRequest[] = Array.isArray(raw) ? raw : (raw.items || [])
+          setRecentRequests(arr
+            .map((r: any) => ({ ...r, fare: Number(r.fare ?? 0) }))
+            .filter((r) => r.status === 'ACCEPTED' || r.status === 'IN_PROGRESS')
+            .slice(0, 5))
         }
       } catch {
         // silent
@@ -211,12 +214,12 @@ export function WalkingPartnerDashboard() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-surface-900 dark:text-white truncate">
-                        {req.pickupLocation || req.type}
+                        {req.startLocation || req.type}
                       </p>
                       <div className="flex items-center gap-3 mt-0.5">
                         <span className="text-xs text-surface-500 flex items-center gap-1">
                           <Clock className="w-3 h-3" />
-                          {req.scheduledTime ? new Date(req.scheduledTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'ASAP'}
+                          {req.startTime ? new Date(req.startTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : 'ASAP'}
                         </span>
                         {req.distance && (
                           <span className="text-xs text-surface-500">{req.distance}</span>
@@ -224,13 +227,13 @@ export function WalkingPartnerDashboard() {
                       </div>
                     </div>
                     <div className="text-right flex flex-col items-end gap-1">
-                      <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">₹{req.price}</span>
+                      <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">₹{req.fare}</span>
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                        req.status === 'in_progress'
+                        req.status === 'IN_PROGRESS'
                           ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400'
                           : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
                       }`}>
-                        {req.status === 'in_progress' ? 'In Progress' : 'Accepted'}
+                        {req.status === 'IN_PROGRESS' ? 'In Progress' : 'Accepted'}
                       </span>
                     </div>
                   </Link>

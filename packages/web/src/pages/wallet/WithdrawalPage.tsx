@@ -1,3 +1,4 @@
+﻿import { getErrorMessage } from '../../lib/error'
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
@@ -52,8 +53,8 @@ export function WithdrawalPage() {
       })
       setSuccess(true)
       toast.success('Withdrawal request submitted successfully')
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Withdrawal failed')
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Withdrawal failed'))
     } finally {
       setLoading(false)
     }

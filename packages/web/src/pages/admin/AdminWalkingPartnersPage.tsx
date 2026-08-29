@@ -1,7 +1,9 @@
+﻿import { getErrorMessage } from '../../lib/error'
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, ChevronLeft, ChevronRight, Check, X, Wallet, CreditCard } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Check, X, Wallet, CreditCard, FileDown } from 'lucide-react'
 import { adminApi } from '../../lib/api'
+import { exportTableToPdf } from '../../lib/pdfExport'
 
 interface Partner {
   id: string
@@ -22,7 +24,7 @@ export function AdminWalkingPartnersPage() {
   const [error, setError] = useState('')
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
-  const [statusFilter, setStatusFilter] = useState('PENDING')
+  const [statusFilter, setStatusFilter] = useState('ALL')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [rejectId, setRejectId] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
@@ -33,13 +35,29 @@ export function AdminWalkingPartnersPage() {
     setError('')
     try {
       const params: any = { page }
-      if (statusFilter) params.status = statusFilter
+      if (statusFilter && statusFilter !== 'ALL') params.status = statusFilter
       const res = await adminApi.getPartners(params)
       const d = res.data?.data || res.data
-      setPartners(Array.isArray(d?.partners) ? d.partners : Array.isArray(d) ? d : [])
-      setTotalPages(d?.totalPages || 1)
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to load partners')
+      const raw = Array.isArray(d?.items) ? d.items : Array.isArray(d?.partners) ? d.partners : Array.isArray(d) ? d : []
+      setPartners(raw.map((p: any) => ({
+        id: p.id,
+        userId: p.userId,
+        name: p.user?.fullName || p.name || 'Unknown',
+        email: p.user?.email || p.email || '',
+        phone: p.user?.phone || p.phone || '',
+        status: p.status,
+        services: [
+          p.providesWalking === true || p.providesWalking === 'true' ? 'WALKING' : null,
+          p.providesCarry === true || p.providesCarry === 'true' ? 'CARRY_BUDDY' : null,
+        ].filter(Boolean) as string[],
+        bankAccount: [p.bankAccountName, p.bankAccountNumber, p.bankIfsc].filter(Boolean).join(' Â· ') || p.bankAccount || '',
+        upiId: p.upiId || '',
+        createdAt: p.createdAt,
+      })))
+      const total = Number(d?.total) || 0
+      setTotalPages(Math.max(1, Math.ceil(total / 20)))
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to load partners'))
     } finally {
       setLoading(false)
     }
@@ -54,8 +72,8 @@ export function AdminWalkingPartnersPage() {
     try {
       await adminApi.approvePartner(id)
       setPartners((prev) => prev.filter((p) => p.id !== id))
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to approve partner')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to approve partner'))
     } finally {
       setActionLoading(null)
     }
@@ -69,21 +87,23 @@ export function AdminWalkingPartnersPage() {
       setPartners((prev) => prev.filter((p) => p.id !== id))
       setRejectId(null)
       setRejectReason('')
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to reject partner')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to reject partner'))
     } finally {
       setActionLoading(null)
     }
   }
 
   const statusBadge = (status: string) => {
-    const map: Record<string, string> = {
-      PENDING: 'bg-amber-900/30 text-amber-400',
-      APPROVED: 'bg-emerald-900/30 text-emerald-400',
-      REJECTED: 'bg-red-900/30 text-red-400',
-      ACTIVE: 'bg-emerald-900/30 text-emerald-400',
-      SUSPENDED: 'bg-red-900/30 text-red-400',
-    }
+      const map: Record<string, string> = {
+        ALL: 'bg-gray-700 text-gray-300',
+        PENDING: 'bg-amber-900/30 text-amber-400',
+        APPLIED: 'bg-amber-900/30 text-amber-400',
+        APPROVED: 'bg-emerald-900/30 text-emerald-400',
+        REJECTED: 'bg-red-900/30 text-red-400',
+        ACTIVE: 'bg-emerald-900/30 text-emerald-400',
+        SUSPENDED: 'bg-red-900/30 text-red-400',
+      }
     return map[status] || 'bg-gray-700 text-gray-400'
   }
 
@@ -106,11 +126,34 @@ export function AdminWalkingPartnersPage() {
             <h1 className="text-2xl font-bold text-white">Partners</h1>
             <p className="text-gray-400 text-sm mt-1">Approve & manage partner applications</p>
           </div>
+          <button
+            onClick={() =>
+              exportTableToPdf({
+                title: 'Walking Partners',
+                subtitle: `Page ${page} of ${totalPages}`,
+                columns: ['Name', 'Email', 'Phone', 'Status', 'Services', 'Joined'],
+                rows: partners.map((p) => [
+                  p.name || '-',
+                  p.email || '-',
+                  p.phone || '-',
+                  p.status || '-',
+                  (p.services || []).join(', ') || '-',
+                  p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN') : '-',
+                ]),
+                fileName: `rentbuddy-partners-${new Date().toISOString().slice(0, 10)}`,
+                landscape: true,
+              })
+            }
+            disabled={partners.length === 0}
+            className="ml-auto inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-gray-300 hover:text-white text-sm transition"
+          >
+            <FileDown className="w-4 h-4" /> PDF
+          </button>
         </div>
 
         <div className="mb-6">
           <div className="flex gap-2">
-            {['PENDING', 'APPROVED', 'REJECTED'].map((s) => (
+            {[['ALL', 'All'], ['PENDING', 'Pending'], ['APPLIED', 'Applied'], ['APPROVED', 'Approved'], ['REJECTED', 'Rejected']].map(([s, label]) => (
               <button
                 key={s}
                 onClick={() => { setStatusFilter(s); setPage(1) }}
@@ -120,7 +163,7 @@ export function AdminWalkingPartnersPage() {
                     : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
                 }`}
               >
-                {s.charAt(0) + s.slice(1).toLowerCase()}
+                {label}
               </button>
             ))}
           </div>
@@ -216,7 +259,7 @@ export function AdminWalkingPartnersPage() {
                         </div>
                       )}
 
-                      {partner.status === 'PENDING' && (
+                      {(partner.status === 'PENDING' || partner.status === 'APPLIED') && (
                         <div className="flex gap-2">
                           <button
                             onClick={(e) => { e.stopPropagation(); handleApprove(partner.id) }}

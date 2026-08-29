@@ -71,6 +71,18 @@ const envSchema = z.object({
   MIN_BOOKING_AMOUNT: z.string().default("50").transform(Number),
   MAX_BOOKING_AMOUNT: z.string().default("10000").transform(Number),
 
+  // Email (SMTP) — optional in dev, required for real OTP delivery
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.string().default("587").transform(Number),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().default("RentBuddy <noreply@rentbuddy.app>"),
+
+  // SMS (Twilio) — optional
+  TWILIO_ACCOUNT_SID: z.string().optional(),
+  TWILIO_AUTH_TOKEN: z.string().optional(),
+  TWILIO_FROM_NUMBER: z.string().optional(),
+
   // LocationIQ — optional in dev
   LOCATIONIQ_API_KEY: z.string().default("pk_dev_placeholder"),
   LOCATIONIQ_BASE_URL: z.string().default("https://us1.locationiq.com/v1"),

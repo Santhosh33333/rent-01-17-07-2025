@@ -1,3 +1,4 @@
+﻿import { getErrorMessage } from '../lib/error'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useRole, ROLE_META, UserRole } from '../lib/roleContext'
@@ -41,8 +42,8 @@ export function RoleSwitcher() {
       setIsOpen(false)
       const dashboard = ROLE_DASHBOARDS[role] || '/dashboard'
       navigate(dashboard, { replace: true })
-    } catch (err: any) {
-      setMessage({ type: 'error', text: err.response?.data?.error || 'Failed to switch role' })
+    } catch (err: unknown) {
+      setMessage({ type: 'error', text: getErrorMessage(err, 'Failed to switch role') })
     } finally {
       setSwitching(false)
     }

@@ -14,7 +14,6 @@ export function initializeFirebase(): void {
     firebaseApp = initFirebaseApp({
       credential: cert(serviceAccount),
     });
-    console.log("Firebase Admin initialized successfully.");
   } catch (err) {
     console.warn("Failed to initialize Firebase Admin:", err);
   }
@@ -27,7 +26,6 @@ export async function sendPushNotification(
   data?: Record<string, string>
 ): Promise<void> {
   if (!firebaseApp) {
-    console.log(`[Push skipped] Firebase not configured. Would send to ${userId}: ${title}`);
     return;
   }
 
@@ -39,7 +37,6 @@ export async function sendPushNotification(
     });
 
     if (!device || !device.fcmToken) {
-      console.log(`No FCM token found for user ${userId}`);
       return;
     }
 

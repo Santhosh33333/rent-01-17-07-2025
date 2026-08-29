@@ -10,9 +10,14 @@ import {
   unmuteUser,
   getMutedList,
   reportChat,
+  getPrivacyPreferences,
+  updatePrivacyPreferences,
 } from "../controllers/privacyController";
 
 const router = express.Router();
+
+router.get("/preferences", authenticateToken, getPrivacyPreferences);
+router.put("/preferences", authenticateToken, updatePrivacyPreferences);
 
 router.get("/chat-settings", authenticateToken, getChatRequestSettings);
 router.put("/chat-settings", authenticateToken, updateChatRequestSettings);

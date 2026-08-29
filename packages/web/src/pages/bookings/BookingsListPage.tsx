@@ -13,12 +13,16 @@ import { useAsync } from '../../hooks/useAsync'
 interface Booking {
   id: string
   serviceType: string
-  pickupLocation: string
-  dropLocation: string
+  startLocation: string
+  endLocation: string
   status: string
-  scheduledTime: string
+  scheduledAt: string
   partnerName?: string
-  totalPrice?: number
+  estimatedAmount?: number
+  finalAmount?: number
+  partner?: {
+    user: { fullName?: string }
+  }
 }
 
 type TabType = 'ACTIVE' | 'PAST' | 'CANCELLED' | 'ALL'
@@ -45,9 +49,9 @@ export function BookingsListPage() {
   const { loading, error, retry } = useAsync(
     async () => {
       const res = await api.get('/bookings')
-      const raw = res.data?.data || res.data || []
-      const data = Array.isArray(raw) ? raw : []
-      setBookings(data)
+      const raw = res.data?.data || res.data || {}
+      const data = Array.isArray(raw) ? raw : raw.items || []
+      setBookings(data.map((b: any) => ({ ...b, partnerName: b?.partner?.user?.fullName })))
       return data
     },
     true
@@ -61,9 +65,9 @@ export function BookingsListPage() {
     else matchesTab = true
 
     const matchesSearch = search
-      ? (b.pickupLocation || '').toLowerCase().includes(search.toLowerCase()) ||
-        (b.dropLocation || '').toLowerCase().includes(search.toLowerCase()) ||
-        (b.partnerName || '').toLowerCase().includes(search.toLowerCase())
+      ? (b.startLocation || '').toLowerCase().includes(search.toLowerCase()) ||
+        (b.endLocation || '').toLowerCase().includes(search.toLowerCase()) ||
+        (b.partnerName || b.partner?.user?.fullName || '').toLowerCase().includes(search.toLowerCase())
       : true
 
     return matchesTab && matchesSearch
@@ -178,18 +182,18 @@ export function BookingsListPage() {
                       </h3>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
                         <span className="flex items-center gap-1 text-xs text-surface-500">
-                          <MapPin className="w-3 h-3" /> {booking.pickupLocation || 'Pickup'}
+                          <MapPin className="w-3 h-3" /> {booking.startLocation || 'Pickup'}
                         </span>
-                        {booking.dropLocation && (
+                        {booking.endLocation && booking.endLocation !== booking.startLocation && (
                           <>
                             <ArrowRight className="w-3 h-3 text-surface-400" />
-                            <span className="text-xs text-surface-500">{booking.dropLocation}</span>
+                            <span className="text-xs text-surface-500">{booking.endLocation}</span>
                           </>
                         )}
                         <span className="flex items-center gap-1 text-xs text-surface-500">
                           <Clock className="w-3 h-3" />
-                          {booking.scheduledTime
-                            ? new Date(booking.scheduledTime).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                          {booking.scheduledAt
+                            ? new Date(booking.scheduledAt).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
                             : 'ASAP'}
                         </span>
                       </div>
@@ -199,8 +203,8 @@ export function BookingsListPage() {
                     </div>
                   </div>
                   <div className="text-right flex flex-col items-end gap-2 flex-shrink-0">
-                    {booking.totalPrice !== undefined && (
-                      <span className="text-sm font-bold text-surface-900 dark:text-white">₹{booking.totalPrice}</span>
+                    {(booking.finalAmount ?? booking.estimatedAmount) !== undefined && (
+                      <span className="text-sm font-bold text-surface-900 dark:text-white">₹{(booking.finalAmount ?? booking.estimatedAmount ?? 0).toLocaleString('en-IN')}</span>
                     )}
                     <span className={`text-[10px] px-2.5 py-1 rounded-full font-semibold ${statusConfig[booking.status]?.badge || ''}`}>
                       {statusConfig[booking.status]?.label || booking.status}

@@ -22,7 +22,7 @@ export function SplashPage() {
             navigate('/profile/complete', { replace: true })
           }
         } else {
-          navigate('/login', { replace: true })
+          navigate('/account-type', { replace: true })
         }
       }, 500)
     }, 2000)
@@ -77,6 +77,10 @@ export function SplashPage() {
           0% { opacity: 0; transform: scale(0.3); }
           100% { opacity: 1; transform: scale(1); }
         }
+        @keyframes float-gentle {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-10px); }
+        }
         @keyframes stagger-slide-up {
           0% { opacity: 0; transform: translateY(24px); }
           100% { opacity: 1; transform: translateY(0); }
@@ -101,23 +105,15 @@ export function SplashPage() {
 
         <div className="relative z-10 flex flex-col items-center">
           <div className="relative mb-6 stagger-logo">
-            <div className="w-24 h-24 rounded-[28px] bg-gradient-to-br from-primary-500 via-primary-400 to-accent-500 flex items-center justify-center shadow-2xl shadow-primary-500/30 overflow-hidden">
-              <svg viewBox="0 0 100 100" className="w-14 h-14 relative z-10" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M50 18L82 44V78H58V56H42V78H18V44L50 18Z" fill="white" fillOpacity="0.93"/>
-                <rect x="42" y="56" width="16" height="22" rx="2" fill="#6366f1" fillOpacity="0.8"/>
-                <circle cx="54.5" cy="68" r="1.5" fill="white" fillOpacity="0.9"/>
-                <rect x="24" y="48" width="14" height="12" rx="2" fill="#818cf8" fillOpacity="0.5"/>
-                <rect x="62" y="48" width="14" height="12" rx="2" fill="#818cf8" fillOpacity="0.5"/>
-                <line x1="31" y1="48" x2="31" y2="60" stroke="white" strokeWidth="1" strokeOpacity="0.5"/>
-                <line x1="24" y1="54" x2="38" y2="54" stroke="white" strokeWidth="1" strokeOpacity="0.5"/>
-                <line x1="69" y1="48" x2="69" y2="60" stroke="white" strokeWidth="1" strokeOpacity="0.5"/>
-                <line x1="62" y1="54" x2="76" y2="54" stroke="white" strokeWidth="1" strokeOpacity="0.5"/>
-                <circle cx="44" cy="30" r="5" fill="#f97316" fillOpacity="0.9"/>
-                <circle cx="56" cy="30" r="5" fill="#f97316" fillOpacity="0.9"/>
-                <path d="M44 22Q50 16 56 22" stroke="white" strokeWidth="1.5" strokeOpacity="0.5" fill="none" strokeLinecap="round"/>
-              </svg>
+            <div className="w-24 h-24 flex items-center justify-center">
+              <img
+                src="/logo-mark.svg"
+                alt="RentBuddy logo"
+                className="w-full h-full relative z-10 drop-shadow-2xl"
+                style={{ animation: 'float-gentle 4s ease-in-out infinite' }}
+              />
               <div
-                className="absolute inset-0 w-full h-full pointer-events-none"
+                className="absolute inset-0 w-full h-full pointer-events-none overflow-hidden rounded-[28px]"
                 style={{ animation: 'shimmer 1.8s ease-in-out 0.8s both' }}
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent" style={{ width: '40%', height: '200%', top: '-50%' }} />

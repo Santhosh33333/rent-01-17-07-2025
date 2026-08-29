@@ -13,12 +13,14 @@ import { SkeletonLoader } from '../../components/SkeletonLoader'
 interface Booking {
   id: string
   serviceType: string
-  pickupLocation: string
-  dropLocation: string
+  startLocation: string
+  endLocation: string
   status: string
-  scheduledTime: string
-  duration: number
-  totalPrice: number
+  scheduledAt: string
+  durationMinutes: number
+  estimatedAmount?: number
+  finalAmount?: number
+  totalPrice?: number
   platformFee: number
   partnerEarning: number
   partnerName?: string
@@ -63,7 +65,12 @@ export function BookingDetailPage() {
       try {
         const res = await api.get(`/bookings/${id}`)
         const data = res.data?.data || res.data
-        setBooking(data)
+        setBooking({
+          ...data,
+          partnerName: data?.partner?.user?.fullName,
+          partnerRating: data?.partner?.averageRating ?? data?.partner?.user?.rating,
+          partnerPhone: data?.partner?.user?.phone,
+        })
         if (data?.notes) {
           try { const n = JSON.parse(data.notes); if (n.paymentMethod) setBooking(prev => prev ? { ...prev, paymentMethod: n.paymentMethod } : null) } catch {}
         }
@@ -131,16 +138,13 @@ export function BookingDetailPage() {
         </div>
       </AnimatedPage>
 
-      {booking.status === 'PARTNER_ACCEPTED' && !booking.paymentMethod && (
+      {booking.status === 'PARTNER_ACCEPTED' && (
         <AnimatedPage delay={50}>
           <div className="p-4 rounded-2xl bg-gradient-to-r from-primary-500 to-primary-600 text-white flex items-center justify-between gap-3">
             <div>
               <p className="font-bold text-sm">🎉 Partner Accepted!</p>
-              <p className="text-xs text-white/80 mt-0.5">Choose how you want to pay</p>
+              <p className="text-xs text-white/80 mt-0.5">Your partner has been assigned. Payment was made from your wallet.</p>
             </div>
-            <Link to={`/bookings/${booking.id}/payment`} className="px-4 py-2 rounded-xl bg-white text-primary-600 text-sm font-bold hover:bg-primary-50 transition-colors flex-shrink-0">
-              Pay Now
-            </Link>
           </div>
         </AnimatedPage>
       )}
@@ -192,15 +196,15 @@ export function BookingDetailPage() {
               <MapPin className="w-4 h-4 text-emerald-500" />
               <div>
                 <p className="text-xs text-surface-500">Pickup</p>
-                <p className="text-sm font-medium text-surface-900 dark:text-white">{booking.pickupLocation}</p>
+                <p className="text-sm font-medium text-surface-900 dark:text-white">{booking.startLocation}</p>
               </div>
             </div>
-            {booking.dropLocation && (
+            {booking.endLocation && booking.endLocation !== booking.startLocation && (
               <div className="flex items-center gap-3 p-3 rounded-xl bg-surface-50 dark:bg-surface-800/50">
                 <Navigation className="w-4 h-4 text-primary-500" />
                 <div>
                   <p className="text-xs text-surface-500">Destination</p>
-                  <p className="text-sm font-medium text-surface-900 dark:text-white">{booking.dropLocation}</p>
+                  <p className="text-sm font-medium text-surface-900 dark:text-white">{booking.endLocation}</p>
                 </div>
               </div>
             )}
@@ -210,7 +214,7 @@ export function BookingDetailPage() {
                 <div>
                   <p className="text-xs text-surface-500">Date</p>
                   <p className="text-sm font-medium text-surface-900 dark:text-white">
-                    {new Date(booking.scheduledTime).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    {booking.scheduledAt ? new Date(booking.scheduledAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                   </p>
                 </div>
               </div>
@@ -219,17 +223,17 @@ export function BookingDetailPage() {
                 <div>
                   <p className="text-xs text-surface-500">Time</p>
                   <p className="text-sm font-medium text-surface-900 dark:text-white">
-                    {new Date(booking.scheduledTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                    {booking.scheduledAt ? new Date(booking.scheduledAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}
                   </p>
                 </div>
               </div>
             </div>
-            {booking.duration && (
+            {booking.durationMinutes != null && booking.durationMinutes > 0 && (
               <div className="flex items-center gap-3 p-3 rounded-xl bg-surface-50 dark:bg-surface-800/50">
                 <Clock className="w-4 h-4 text-amber-500" />
                 <div>
                   <p className="text-xs text-surface-500">Duration</p>
-                  <p className="text-sm font-medium text-surface-900 dark:text-white">{booking.duration} minutes</p>
+                  <p className="text-sm font-medium text-surface-900 dark:text-white">{booking.durationMinutes} minutes</p>
                 </div>
               </div>
             )}
@@ -276,7 +280,7 @@ export function BookingDetailPage() {
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-surface-500">Estimated Price</span>
-              <span className="font-medium text-surface-900 dark:text-white">₹{(booking.totalPrice || 0).toLocaleString('en-IN')}</span>
+              <span className="font-medium text-surface-900 dark:text-white">₹{(booking.finalAmount ?? booking.estimatedAmount ?? 0).toLocaleString('en-IN')}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-surface-500">Platform Fee</span>
@@ -291,7 +295,7 @@ export function BookingDetailPage() {
             <div className="h-px bg-surface-200 dark:bg-surface-700" />
             <div className="flex justify-between">
               <span className="text-sm font-bold text-surface-900 dark:text-white">Total</span>
-              <span className="text-lg font-bold text-primary-600 dark:text-primary-400">₹{(booking.totalPrice || 0).toLocaleString('en-IN')}</span>
+              <span className="text-lg font-bold text-primary-600 dark:text-primary-400">₹{(booking.finalAmount ?? booking.estimatedAmount ?? 0).toLocaleString('en-IN')}</span>
             </div>
           </div>
         </GlassCard>

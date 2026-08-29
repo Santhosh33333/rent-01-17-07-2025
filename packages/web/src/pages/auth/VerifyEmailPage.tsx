@@ -1,3 +1,4 @@
+﻿import { getErrorMessage } from '../../lib/error'
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -39,8 +40,8 @@ export function VerifyEmailPage() {
       setSuccess(true)
       toast.success('Email verified successfully!')
       setTimeout(() => navigate('/login', { replace: true }), 2000)
-    } catch (err: any) {
-      setApiError(err?.response?.data?.error || err?.message || 'Verification failed')
+    } catch (err: unknown) {
+      setApiError(getErrorMessage(err, 'Verification failed'))
     } finally {
       setLoading(false)
     }
@@ -53,8 +54,8 @@ export function VerifyEmailPage() {
       await api.post('/auth/resend-otp', { userId, channel: 'email' })
       toast.success('OTP resent to your email')
       setCooldown(60)
-    } catch (err: any) {
-      setApiError(err?.response?.data?.error || err?.message || 'Failed to resend OTP')
+    } catch (err: unknown) {
+      setApiError(getErrorMessage(err, 'Failed to resend OTP'))
     }
   }, [userId, cooldown])
 

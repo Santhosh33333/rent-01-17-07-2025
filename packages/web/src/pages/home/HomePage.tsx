@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
   Bell,
@@ -22,10 +22,10 @@ import { QUICK_ACTIONS } from '../../lib/discoveryData'
 interface Booking {
   id: string
   serviceType: string
-  pickupLocation: string
-  dropLocation: string
+  startLocation: string
+  endLocation: string
   status: string
-  scheduledTime: string
+  scheduledAt: string
   partnerName?: string
 }
 
@@ -35,6 +35,8 @@ interface WalletData {
 
 export function HomePage() {
   const { user } = useAuth()
+  const navigate = useNavigate()
+  const [searchQuery, setSearchQuery] = useState('')
   const [recentBookings, setRecentBookings] = useState<Booking[]>([])
   const [wallet, setWallet] = useState<WalletData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -48,7 +50,7 @@ export function HomePage() {
         ])
         if (bookingsRes.status === 'fulfilled') {
           const raw = bookingsRes.value.data?.data || bookingsRes.value.data || []
-          const arr = Array.isArray(raw) ? raw : []
+          const arr = Array.isArray(raw) ? raw : (raw.items || [])
           setRecentBookings(arr.slice(0, 3))
         }
         if (walletRes.status === 'fulfilled') {
@@ -130,6 +132,13 @@ export function HomePage() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/70" />
               <input
                 type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && searchQuery.trim()) {
+                    navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`)
+                  }
+                }}
                 placeholder="Search people, places, events, movies..."
                 className="w-full rounded-2xl border border-white/20 bg-white/10 py-3 pl-11 pr-4 text-sm text-white placeholder:text-white/60 outline-none"
               />
@@ -260,10 +269,10 @@ export function HomePage() {
                     <Footprints className="w-4 h-4 text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-surface-900 dark:text-white truncate">{booking.pickupLocation || 'Pickup'}</p>
+                    <p className="text-sm font-semibold text-surface-900 dark:text-white truncate">{booking.startLocation || 'Pickup'}</p>
                     <div className="flex items-center gap-2 mt-0.5 text-xs text-surface-500">
                       <Calendar className="w-3 h-3" />
-                      {booking.scheduledTime ? new Date(booking.scheduledTime).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : 'ASAP'}
+                      {booking.scheduledAt ? new Date(booking.scheduledAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : 'ASAP'}
                     </div>
                   </div>
                   <span className={`text-[10px] px-2.5 py-1 rounded-full font-semibold flex-shrink-0 ${statusBadge(booking.status)}`}>

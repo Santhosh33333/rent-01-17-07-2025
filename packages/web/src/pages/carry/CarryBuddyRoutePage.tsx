@@ -42,7 +42,9 @@ export function CarryBuddyRoutePage() {
     const fetchActiveJob = async () => {
       try {
         const res = await api.get('/carry-buddy/my-requests')
-        const data = Array.isArray(res.data) ? res.data : res.data?.data ?? []
+        const root = res.data
+        const arr = Array.isArray(root) ? root : (root?.data?.items ?? root?.data ?? [])
+        const data: any[] = Array.isArray(arr) ? arr : []
         const active = data.find((j: RouteJob) => j.status === 'active' || j.status === 'in_progress')
         setActiveJob(active ?? null)
       } catch {

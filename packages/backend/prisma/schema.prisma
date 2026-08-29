@@ -25,9 +25,12 @@ model User {
   city                           String?
   country                        String?
   status                         String    @default("ACTIVE")
+  suspendedUntil                 DateTime?
+  suspensionReason               String?
   role                           String    @default("USER")
   activeRole                     String?
   firebaseUid                    String?   @unique
+  appleId                        String?   @unique
   emailVerified                  Boolean   @default(false)
   mobileVerified                 Boolean   @default(false)
   phoneVerified                  Boolean   @default(false)
@@ -726,11 +729,13 @@ model PricingConfig {
   value       String
   description String?
   category    String   @default("GENERAL")
+  serviceType String? // WALKING | CARRY_BUDDY | null (general applies to all)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([category])
+  @@index([serviceType])
 }
 
 model PartnerLevel {
@@ -900,6 +905,7 @@ model AdminUser {
   userId           String    @unique
   roleId           String
   department       String?
+  permissions      String?
   twoFactorEnabled Boolean   @default(false)
   twoFactorSecret  String?
   lastActiveAt     DateTime?
@@ -1274,6 +1280,7 @@ model AppVersion {
 // ============================================================
 
 model Partner {
+  dispatchRequests  DispatchRequest[]
   id                String    @id @default(uuid())
   userId            String    @unique
   status            String    @default("NONE") // NONE, APPLIED, APPROVED, REJECTED
@@ -1308,6 +1315,7 @@ model Partner {
 }
 
 model Booking {
+  dispatchRequests  DispatchRequest[]
   id                String    @id @default(uuid())
   userId            String
   partnerId         String?
@@ -1342,6 +1350,11 @@ model Booking {
   couponCode        String?
   discountAmount    Float?
 
+  // Pricing snapshot (frozen at booking creation so later admin config changes
+  // never alter an already-confirmed booking's amount).
+  pricingVersion    Int?
+  pricingSnapshot   Json?
+
   // Payment
   razorpayOrderId   String?
   razorpayPaymentId String?
@@ -1373,12 +1386,29 @@ model Booking {
   user    User     @relation("BookingUser", fields: [userId], references: [id], onDelete: Cascade)
   partner Partner? @relation("BookingPartner", fields: [partnerId], references: [id])
   timeout BookingTimeout?
+  logs    BookingLog[]
 
   @@index([status])
   @@index([userId])
   @@index([partnerId])
   @@index([serviceType])
   @@index([scheduledAt])
+}
+
+model BookingLog {
+  id        String   @id @default(uuid())
+  bookingId String
+  fromStatus String?
+  toStatus  String
+  actorId    String?
+  actorType String   @default("SYSTEM") // USER, PARTNER, SYSTEM, ADMIN
+  note      String?
+  createdAt DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@index([createdAt])
 }
 
 model BookingTimeout {
@@ -1423,3 +1453,22 @@ model PartnerLocation {
 
   @@index([partnerId])
 }
+
+model DispatchRequest {
+  id          String    @id @default(uuid())
+  bookingId   String
+  partnerId   String
+  status      String    @default("SENT") // SENT, VIEWED, ACCEPTED, EXPIRED, REJECTED, CANCELLED
+  sentAt      DateTime  @default(now())
+  viewedAt    DateTime?
+  respondedAt DateTime?
+  expiresAt   DateTime
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@unique([bookingId, partnerId])
+  @@index([bookingId])
+  @@index([partnerId, status])
+}
+

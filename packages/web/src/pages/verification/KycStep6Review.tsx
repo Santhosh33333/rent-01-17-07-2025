@@ -1,3 +1,4 @@
+﻿import { getErrorMessage } from '../../lib/error'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Send, Loader2, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
@@ -57,8 +58,8 @@ export function KycStep6Review() {
       await api.post('/verification/submit')
       toast.success('KYC submitted for verification!')
       navigate('/verification')
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to submit KYC')
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Failed to submit KYC'))
     } finally {
       setSubmitting(false)
     }

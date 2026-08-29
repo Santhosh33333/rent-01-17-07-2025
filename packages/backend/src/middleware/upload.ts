@@ -19,6 +19,21 @@ const storage = multer.diskStorage({
   },
 });
 
+const privateUploadDir = path.join(uploadDir, "private");
+if (!fs.existsSync(privateUploadDir)) {
+  fs.mkdirSync(privateUploadDir, { recursive: true });
+}
+
+const privateStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, privateUploadDir);
+  },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `${randomUUID()}${ext}`);
+  },
+});
+
 const imageFilter = (_req: Express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   const allowed = /jpeg|jpg|png|webp|gif/;
   const ext = path.extname(file.originalname).toLowerCase();
@@ -31,6 +46,17 @@ const imageFilter = (_req: Express.Request, file: Express.Multer.File, cb: multe
 
 export const upload = multer({
   storage,
+  fileFilter: imageFilter,
+  limits: {
+    fileSize: env.MAX_FILE_SIZE,
+    files: 1,
+  },
+});
+
+// KYC documents land under uploads/private and are only served through the
+// authenticated access guard in middleware/fileAccess.ts — never publicly.
+export const privateUpload = multer({
+  storage: privateStorage,
   fileFilter: imageFilter,
   limits: {
     fileSize: env.MAX_FILE_SIZE,

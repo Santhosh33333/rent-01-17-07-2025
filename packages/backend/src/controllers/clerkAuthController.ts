@@ -78,6 +78,7 @@ export async function clerkSync(req: Request, res: Response): Promise<void> {
 
     const accessToken = generateAccessToken({ userId: user.id, email: user.email });
     const refreshToken = generateRefreshToken(user.id);
+    await prisma.session.deleteMany({ where: { userId: user.id } });
     await prisma.session.create({
       data: {
         userId: user.id,

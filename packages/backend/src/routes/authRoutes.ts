@@ -2,6 +2,7 @@ import { Router } from "express";
 import { body } from "express-validator";
 import { authRateLimiter } from "../middleware/rateLimiter";
 import { sanitizeInput, validateRequest } from "../middleware/validation";
+import { authenticateToken } from "../middleware/auth";
 import * as authController from "../controllers/authController";
 import * as clerkAuthController from "../controllers/clerkAuthController";
 
@@ -68,6 +69,15 @@ router.post(
 
 router.post("/logout", authController.logout);
 
+// Switch active account role (USER <-> PARTNER); backend-enforced
+router.post(
+  "/switch-role",
+  authenticateToken,
+  [body("role").notEmpty().isIn(["USER", "PARTNER"]).withMessage("Role must be USER or PARTNER")],
+  validateRequest,
+  authController.switchRole
+);
+
 router.post(
   "/refresh-token",
   [body("refreshToken").notEmpty().withMessage("Refresh token is required")],
@@ -93,6 +103,7 @@ router.post(
 
 router.post(
   "/verify-email",
+  authRateLimiter,
   [body("userId").notEmpty(), body("otp").isLength({ min: 4, max: 8 })],
   validateRequest,
   authController.verifyEmail
@@ -100,6 +111,7 @@ router.post(
 
 router.post(
   "/verify-mobile",
+  authRateLimiter,
   [body("userId").notEmpty(), body("otp").isLength({ min: 4, max: 8 })],
   validateRequest,
   authController.verifyMobile
@@ -107,6 +119,7 @@ router.post(
 
 router.post(
   "/resend-otp",
+  authRateLimiter,
   [body("userId").notEmpty(), body("channel").isIn(["email", "mobile"])],
   validateRequest,
   authController.resendOTP
@@ -114,6 +127,7 @@ router.post(
 
 router.post(
   "/verify-password",
+  authRateLimiter,
   [body("email").isEmail().normalizeEmail(), body("password").notEmpty()],
   validateRequest,
   authController.verifyPassword

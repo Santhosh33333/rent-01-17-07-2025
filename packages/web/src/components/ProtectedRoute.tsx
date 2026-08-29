@@ -41,14 +41,35 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   const isProfileRoute = location.pathname === '/profile/complete'
   const isAuthRoute = ['/login', '/register', '/forgot-password', '/verify-email', '/verify-mobile', '/onboarding'].includes(location.pathname)
 
-  if (!profileComplete && !isProfileRoute && !isAuthRoute) {
+  // Only USER-surface routes enforce the shared completion page. The page is
+  // mounted under the USER layout — forcing PARTNER/ADMIN there creates an
+  // infinite redirect loop with the role check below.
+  if (!profileComplete && !isProfileRoute && !isAuthRoute && (!activeRole || activeRole === 'USER')) {
     return <Navigate to="/profile/complete" replace />
+  }
+
+  // ---- KYC GATE (USER surface): no features until admin-approved KYC ----
+  // Backend issues "VERIFIED" (legacy data may carry "APPROVED").
+  const kycOk = user.kycStatus === 'VERIFIED' || user.kycStatus === 'APPROVED'
+  if ((!activeRole || activeRole === 'USER') && !kycOk) {
+    const kycAllowedPrefixes = ['/verification', '/profile', '/settings', '/notifications']
+    const isKycAllowed = kycAllowedPrefixes.some((p) => location.pathname.startsWith(p))
+    if (!isKycAllowed) {
+      return <Navigate to="/verification" replace />
+    }
   }
 
   // Check if user has access to this route based on their active role
   if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(activeRole)) {
     const dashboard = ROLE_DASHBOARDS[activeRole] || '/dashboard'
     return <Navigate to={dashboard} replace />
+  }
+
+  // ---- PARTNER GATE: partner surfaces stay locked until admin approval ----
+  if (activeRole === 'PARTNER' && location.pathname.startsWith('/partner') && location.pathname !== '/partner/pending') {
+    if (user.partnerStatus !== 'APPROVED') {
+      return <Navigate to="/partner/pending" replace />
+    }
   }
 
   return children ? <>{children}</> : <Outlet />

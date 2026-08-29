@@ -44,11 +44,11 @@ export function DiscoverPage() {
         ])
         if (eventsRes.status === 'fulfilled') {
           const raw = eventsRes.value.data?.data || eventsRes.value.data || []
-          setEvents(Array.isArray(raw) ? raw : [])
+          setEvents(Array.isArray(raw) ? raw : (raw.items || []))
         }
         if (communitiesRes.status === 'fulfilled') {
           const raw = communitiesRes.value.data?.data || communitiesRes.value.data || []
-          setCommunities(Array.isArray(raw) ? raw : [])
+          setCommunities(Array.isArray(raw) ? raw : (raw.items || []))
         }
       } catch {
         // silent

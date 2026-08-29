@@ -1,3 +1,4 @@
+﻿import { getErrorMessage } from '../../lib/error'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
@@ -43,8 +44,8 @@ export function ForgotPasswordPage() {
       }
       toast.success('OTP sent to your email')
       setStep(2)
-    } catch (err: any) {
-      setApiError(err?.response?.data?.error || 'Failed to send OTP')
+    } catch (err: unknown) {
+      setApiError(getErrorMessage(err, 'Failed to send OTP'))
     } finally {
       setLoading(false)
     }
@@ -55,8 +56,8 @@ export function ForgotPasswordPage() {
       setLoading(true)
       setApiError(null)
       setStep(3)
-    } catch (err: any) {
-      setApiError(err?.response?.data?.error || 'Invalid OTP')
+    } catch (err: unknown) {
+      setApiError(getErrorMessage(err, 'Invalid OTP'))
     } finally {
       setLoading(false)
     }
@@ -74,8 +75,8 @@ export function ForgotPasswordPage() {
       })
       toast.success('Password reset successful!')
       navigate('/login', { replace: true })
-    } catch (err: any) {
-      setApiError(err?.response?.data?.error || 'Failed to reset password')
+    } catch (err: unknown) {
+      setApiError(getErrorMessage(err, 'Failed to reset password'))
     } finally {
       setLoading(false)
     }
@@ -148,7 +149,7 @@ export function ForgotPasswordPage() {
             </div>
             {devOtp && (
               <div className="glass-elevated p-4 mb-4 border-2 border-amber-300 dark:border-amber-600">
-                <p className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase mb-1">Dev Mode — Your OTP:</p>
+                <p className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase mb-1">Dev Mode â€” Your OTP:</p>
                 <p className="text-2xl font-mono font-bold text-amber-700 dark:text-amber-300 tracking-widest">{devOtp}</p>
               </div>
             )}

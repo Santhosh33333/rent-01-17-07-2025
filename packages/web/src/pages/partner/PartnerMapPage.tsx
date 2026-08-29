@@ -1,24 +1,26 @@
 import { useState, useEffect } from 'react'
 import {
-  Navigation, List, Loader2, Footprints, Package, User
+  Navigation, List, Loader2, Footprints, Package, User, MapPin
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { api } from '../../lib/api'
 import { AnimatedPage } from '../../components/AnimatedPage'
 import { GlassCard } from '../../components/GlassCard'
+import { LiveMap, MapPoint } from '../../components/LiveMap'
 
 interface NearbyBooking {
   id: string
   serviceType: string
-  pickupLocation: string
-  dropLocation?: string
-  userName?: string
-  estimatedEarning?: number
+  startLocation: string
+  endLocation?: string
+  partnerEarning?: number
+  user?: { fullName?: string }
 }
 
 export function PartnerMapPage() {
   const [view, setView] = useState<'map' | 'list'>('map')
   const [nearby, setNearby] = useState<NearbyBooking[]>([])
+  const [myLoc, setMyLoc] = useState<MapPoint | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -35,6 +37,24 @@ export function PartnerMapPage() {
     }
     fetchNearby()
     const interval = setInterval(fetchNearby, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // The partner's own last-known real GPS (from the location sharer).
+  useEffect(() => {
+    const fetchMine = async () => {
+      try {
+        const res = await api.get('/partner/location')
+        const loc = res.data?.data || res.data
+        if (loc && Number.isFinite(loc.latitude)) {
+          setMyLoc({ lat: loc.latitude, lng: loc.longitude })
+        }
+      } catch {
+        // not shared yet — map simply shows no self marker
+      }
+    }
+    fetchMine()
+    const interval = setInterval(fetchMine, 15000)
     return () => clearInterval(interval)
   }, [])
 
@@ -70,28 +90,19 @@ export function PartnerMapPage() {
 
       {view === 'map' ? (
         <AnimatedPage delay={100}>
-          <div className="relative h-[60vh] rounded-3xl overflow-hidden bg-gradient-to-br from-sky-100 via-emerald-50 to-blue-100 dark:from-sky-900 dark:via-emerald-900 dark:to-blue-900">
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center">
-                <Navigation className="w-16 h-16 text-emerald-400 mx-auto mb-4 animate-pulse" />
-                <p className="text-sm text-surface-500 dark:text-surface-400 font-medium">Interactive map coming soon</p>
+          <div className="relative h-[60vh] rounded-3xl overflow-hidden border border-surface-200 dark:border-surface-700">
+            <LiveMap user={myLoc} height="100%" />
+            <div className="absolute top-3 left-3 right-3 z-[500] pointer-events-none">
+              <div className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl rounded-xl p-3 text-xs text-surface-600 dark:text-surface-300 shadow-lg flex items-start gap-2">
+                <MapPin className="w-4 h-4 text-sky-500 flex-shrink-0 mt-0.5" />
+                <span>Shows your real last-known position. Requester exact locations stay hidden until you're assigned to a booking (privacy).</span>
               </div>
             </div>
-            <div className="absolute top-1/4 left-1/3 w-24 h-24 rounded-full bg-emerald-200/30 dark:bg-emerald-800/20 blur-2xl" />
-            <div className="absolute bottom-1/3 right-1/4 w-32 h-32 rounded-full bg-sky-200/30 dark:bg-sky-800/20 blur-2xl" />
-
-            {/* Simulated nearby markers */}
-            {nearby.slice(0, 5).map((b, i) => (
-              <div
-                key={b.id}
-                className="absolute w-3 h-3 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50 animate-pulse"
-                style={{
-                  top: `${20 + i * 15}%`,
-                  left: `${15 + i * 18}%`,
-                  animationDelay: `${i * 200}ms`,
-                }}
-              />
-            ))}
+            {!myLoc && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <p className="text-sm text-surface-500 dark:text-surface-400">Enable location sharing to see yourself on the map.</p>
+              </div>
+            )}
           </div>
         </AnimatedPage>
       ) : (
@@ -106,14 +117,14 @@ export function PartnerMapPage() {
                     {booking.serviceType === 'WALKING' ? <Footprints className="w-4 h-4 text-white" /> : <Package className="w-4 h-4 text-white" />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-surface-900 dark:text-white truncate">{booking.pickupLocation}</p>
+                    <p className="text-sm font-semibold text-surface-900 dark:text-white truncate">{booking.startLocation}</p>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs text-surface-500">{booking.serviceType === 'WALKING' ? 'Walking' : 'Carry'}</span>
-                      {booking.userName && <span className="text-xs text-surface-400 flex items-center gap-1"><User className="w-3 h-3" /> {booking.userName}</span>}
+                      {booking.user?.fullName && <span className="text-xs text-surface-400 flex items-center gap-1"><User className="w-3 h-3" /> {booking.user.fullName}</span>}
                     </div>
                   </div>
-                  {booking.estimatedEarning !== undefined && (
-                    <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">₹{booking.estimatedEarning}</span>
+                  {booking.partnerEarning !== undefined && (
+                    <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">₹{booking.partnerEarning}</span>
                   )}
                 </div>
               </GlassCard>

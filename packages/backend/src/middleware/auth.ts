@@ -29,7 +29,7 @@ export async function authenticateToken(req: AuthedRequest, res: Response, next:
 
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, email: true, status: true, role: true, activeRole: true },
+      select: { id: true, email: true, status: true, role: true, activeRole: true, suspendedUntil: true },
     });
 
     if (!user) {
@@ -37,8 +37,14 @@ export async function authenticateToken(req: AuthedRequest, res: Response, next:
       return;
     }
 
+    if (user.status === "SUSPENDED" && user.suspendedUntil && user.suspendedUntil <= new Date()) {
+      await prisma.user.update({ where: { id: user.id }, data: { status: "ACTIVE", suspendedUntil: null, suspensionReason: null } });
+      user.status = "ACTIVE";
+    }
+
     if (user.status !== "ACTIVE") {
-      sendError(res, "Account is not active.", 403, "ACCOUNT_INACTIVE");
+      const until = user.suspendedUntil ? ` until ${user.suspendedUntil.toISOString()}` : "";
+      sendError(res, `Account is not active${until}.`, 403, "ACCOUNT_INACTIVE");
       return;
     }
 
@@ -132,6 +138,36 @@ export async function requirePartner(req: AuthedRequest, res: Response, next: Ne
   }
 }
 
+// KYC gate: no app features until the user's verification is admin-approved.
+// Account/KYC/profile routes stay open so users can complete verification.
+export async function requireKycVerified(req: AuthedRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, "Authentication required.", 401, "UNAUTHORIZED");
+      return;
+    }
+    const verification = await prisma.verification.findUnique({
+      where: { userId: req.user.userId },
+      select: { status: true },
+    });
+    // Admin KYC approval sets status=VERIFIED (see adminController.reviewKyc)
+    if (!verification || verification.status !== "VERIFIED") {
+      sendError(
+        res,
+        !verification
+          ? "Complete your KYC verification to use app features."
+          : "Your verification is under review. You can use features once an admin approves it.",
+        403,
+        !verification ? "KYC_REQUIRED" : "KYC_PENDING"
+      );
+      return;
+    }
+    next();
+  } catch {
+    sendError(res, "Verification check failed.", 500, "INTERNAL_ERROR");
+  }
+}
+
 export async function requireSuperAdmin(req: AuthedRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     if (!req.user?.activeRole || req.user.activeRole !== "SUPER_ADMIN") {
@@ -142,4 +178,53 @@ export async function requireSuperAdmin(req: AuthedRequest, res: Response, next:
   } catch {
     sendError(res, "Authorization check failed.", 500, "INTERNAL_ERROR");
   }
+}
+
+const ADMIN_ROLES = ["SUPER_ADMIN", "ADMIN", "MODERATOR", "SUPPORT", "FINANCE"];
+
+export function requirePermission(permission: string) {
+  return async (req: AuthedRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const activeRole = req.user?.activeRole;
+      if (!activeRole || !ADMIN_ROLES.includes(activeRole)) {
+        sendError(res, "Admin access required.", 403, "FORBIDDEN");
+        return;
+      }
+      if (activeRole === "SUPER_ADMIN" || activeRole === "ADMIN") {
+        next();
+        return;
+      }
+      const adminUser = await prisma.adminUser.findUnique({
+        where: { userId: req.user!.userId },
+        include: { role: { select: { permissions: true } } },
+      });
+      let perms: string[] = [];
+      // Per-admin access override (set by super admin) takes precedence over
+      // the role's default permission set.
+      const override = (adminUser as { permissions?: string | null } | null)?.permissions;
+      if (typeof override === "string") {
+        try {
+          const parsedOverride: unknown = JSON.parse(override);
+          if (Array.isArray(parsedOverride)) perms = parsedOverride.filter((p): p is string => typeof p === "string");
+        } catch {
+          perms = [];
+        }
+      }
+      if (perms.length === 0) {
+        try {
+          const parsed: unknown = JSON.parse(adminUser?.role.permissions ?? "[]");
+          if (Array.isArray(parsed)) perms = parsed.filter((p): p is string => typeof p === "string");
+        } catch {
+          perms = [];
+        }
+      }
+      if (!perms.includes(permission)) {
+        sendError(res, "You do not have permission to perform this action.", 403, "PERMISSION_DENIED");
+        return;
+      }
+      next();
+    } catch {
+      sendError(res, "Authorization check failed.", 500, "INTERNAL_ERROR");
+    }
+  };
 }

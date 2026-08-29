@@ -101,7 +101,7 @@ export async function submitGovId(req: AuthedRequest, res: Response): Promise<vo
     await prisma.verification.update({
       where: { id: verification.id },
       data: {
-        govIdUrl: `/uploads/${req.file.filename}`,
+        govIdUrl: `/uploads/private/${req.file.filename}`,
         govIdType,
         status: newStatus,
         updatedAt: new Date(),
@@ -145,7 +145,7 @@ export async function submitSelfie(req: AuthedRequest, res: Response): Promise<v
     await prisma.verification.update({
       where: { id: verification.id },
       data: {
-        selfieUrl: `/uploads/${req.file.filename}`,
+        selfieUrl: `/uploads/private/${req.file.filename}`,
         status: newStatus,
         updatedAt: new Date(),
       },
@@ -188,7 +188,7 @@ export async function submitAddressProof(req: AuthedRequest, res: Response): Pro
     await prisma.verification.update({
       where: { id: verification.id },
       data: {
-        addressProofUrl: `/uploads/${req.file.filename}`,
+        addressProofUrl: `/uploads/private/${req.file.filename}`,
         status: newStatus,
         updatedAt: new Date(),
       },
@@ -313,6 +313,30 @@ export async function submitForVerification(req: AuthedRequest, res: Response): 
       },
     });
 
+    // React on the admin side: notify every active admin so the queue is seen.
+    try {
+      const admins = await prisma.user.findMany({
+        where: { role: { in: ["ADMIN", "SUPER_ADMIN"] }, status: "ACTIVE" },
+        select: { id: true },
+      });
+      if (admins.length > 0) {
+        const submitter = await prisma.user.findUnique({
+          where: { id: req.user!.userId },
+          select: { fullName: true, email: true },
+        });
+        await prisma.notification.createMany({
+          data: admins.map((a) => ({
+            userId: a.id,
+            title: "New KYC submission",
+            body: `${submitter?.fullName || submitter?.email || "A user"} submitted identity documents for review.`,
+            data: JSON.stringify({ type: "KYC_SUBMITTED", verificationId: verification.id }),
+          })),
+        });
+      }
+    } catch (notifyErr) {
+      console.error("Failed to notify admins of KYC submission:", notifyErr);
+    }
+
     sendSuccess(
       res,
       { status: "SUBMITTED", step: 6, totalSteps: 7 },
@@ -381,6 +405,11 @@ export async function getVerificationStatus(req: AuthedRequest, res: Response): 
         progress,
         step: currentStep,
         totalSteps: 7,
+        personalDetails: hasPersonalDetails,
+        govId: hasGovId,
+        selfie: hasSelfie,
+        addressProof: hasAddressProof,
+        emergencyContact: hasEmergencyContact,
         documents: {
           personalDetails: hasPersonalDetails,
           govId: hasGovId,

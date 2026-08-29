@@ -50,7 +50,7 @@ export function BookingTracker({
         longitude: data.longitude,
         heading: data.heading,
         speed: data.speed,
-        timestamp: data.timestamp,
+        timestamp: data.timestamp ?? Date.now(),
       });
       setError(null);
     });
@@ -71,9 +71,9 @@ export function BookingTracker({
   useEffect(() => {
     const unsubscribe = listenToETAUpdates((data) => {
       setETA({
-        eta: data.eta,
-        distance: data.distance,
-        timestamp: data.timestamp,
+        eta: data.eta ?? 0,
+        distance: data.distance ?? 0,
+        timestamp: data.timestamp ?? Date.now(),
       });
     });
 

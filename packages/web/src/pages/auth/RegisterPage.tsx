@@ -1,11 +1,13 @@
+﻿import { getErrorMessage } from '../../lib/error'
 import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import toast from 'react-hot-toast'
 import { User, Mail, Phone, Lock, Eye, EyeOff, ArrowRight, ArrowLeft, Check, Sparkles } from 'lucide-react'
 import { useAuth } from '../../lib/auth'
+import { isClerkConfigured } from '../../lib/clerkAuth'
 import { AnimatedPage } from '../../components/AnimatedPage'
 
 const registerSchema = z.object({
@@ -23,21 +25,28 @@ const registerSchema = z.object({
 type RegisterForm = z.infer<typeof registerSchema>
 
 const steps = [
-  { id: 1, title: 'Personal Info', subtitle: 'Your name and email' },
-  { id: 2, title: 'Security', subtitle: 'Phone & password' },
-  { id: 3, title: 'Confirm', subtitle: 'Review & agree' },
+  { id: 1, title: 'Account Type', subtitle: 'Choose how you want to use RentBuddy' },
+  { id: 2, title: 'Personal Info', subtitle: 'Your name and email' },
+  { id: 3, title: 'Security', subtitle: 'Phone & password' },
+  { id: 4, title: 'Confirm', subtitle: 'Review & agree' },
 ]
 
 export function RegisterPage() {
   const { register: registerUser, user } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [accountType, setAccountType] = useState<'USER' | 'PARTNER'>(() =>
+    (location.state as any)?.accountType === 'PARTNER' ? 'PARTNER' : 'USER'
+  )
 
   useEffect(() => {
     if (user) {
-      navigate('/profile/complete', { replace: true })
+      const role = user.activeRole || user.role || 'USER'
+      // USER accounts complete the shared profile; PARTNER goes to its own surface
+      navigate(role === 'USER' ? '/profile/complete' : '/partner/dashboard', { replace: true })
     }
   }, [user, navigate])
 
@@ -48,8 +57,12 @@ export function RegisterPage() {
 
   const handleNext = async () => {
     let fields: (keyof RegisterForm)[] = []
-    if (step === 1) fields = ['name', 'email']
-    if (step === 2) fields = ['phone', 'password', 'confirmPassword']
+    if (step === 1) {
+      setStep(2)
+      return
+    }
+    if (step === 2) fields = ['name', 'email']
+    if (step === 3) fields = ['phone', 'password', 'confirmPassword']
     const valid = await trigger(fields)
     if (valid) setStep(step + 1)
   }
@@ -63,13 +76,15 @@ export function RegisterPage() {
         email: data.email,
         phone: data.phone,
         password: data.password,
+        accountType,
+        role: accountType,
         dateOfBirth: '2000-01-01',
         gender: 'MALE',
       })
       toast.success('Registration successful!')
-      navigate('/profile/complete', { replace: true })
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Registration failed. Please check your details and try again.')
+      navigate(accountType === 'USER' ? '/profile/complete' : '/partner/dashboard', { replace: true })
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Registration failed. Please check your details and try again.'))
     } finally {
       setLoading(false)
     }
@@ -86,14 +101,11 @@ export function RegisterPage() {
         <AnimatedPage>
           {/* Logo */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-500 via-primary-400 to-accent-500 shadow-xl shadow-primary-500/25 mb-5 animate-float">
-              <svg viewBox="0 0 24 24" className="w-7 h-7" fill="none">
-                <path d="M12 3L20 9V20H14V13H10V20H4V9L12 3Z" fill="white" fillOpacity="0.93"/>
-                <circle cx="9.5" cy="8.5" r="1.5" fill="#f97316" fillOpacity="0.9"/>
-                <circle cx="14.5" cy="8.5" r="1.5" fill="#f97316" fillOpacity="0.9"/>
-                <path d="M9.5 6.5Q12 4.5 14.5 6.5" stroke="white" strokeWidth="0.8" strokeOpacity="0.5" fill="none" strokeLinecap="round"/>
-              </svg>
-            </div>
+            <img
+              src="/logo-mark.svg"
+              alt="RentBuddy logo"
+              className="inline-block w-14 h-14 rounded-2xl shadow-xl shadow-primary-500/25 mb-5 animate-float"
+            />
             <h1 className="text-3xl font-bold font-display text-surface-900 dark:text-white tracking-tight">Create account</h1>
             <p className="mt-2 text-surface-500 dark:text-surface-400 text-sm">Join the RentBuddy community</p>
           </div>
@@ -130,6 +142,55 @@ export function RegisterPage() {
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               {step === 1 && (
                 <>
+                  <div className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => setAccountType('USER')}
+                      className={`w-full rounded-2xl border p-4 text-left transition ${
+                        accountType === 'USER'
+                          ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-950/30 dark:text-primary-300'
+                          : 'border-surface-200 bg-white text-surface-700 hover:border-primary-200 dark:border-surface-700 dark:bg-surface-900 dark:text-surface-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-semibold">Iâ€™m a User</div>
+                          <div className="text-sm opacity-75">Book services, discover local help, and manage my account</div>
+                        </div>
+                        <div className="text-xl">ðŸ‘¤</div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setAccountType('PARTNER')}
+                      className={`w-full rounded-2xl border p-4 text-left transition ${
+                        accountType === 'PARTNER'
+                          ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
+                          : 'border-surface-200 bg-white text-surface-700 hover:border-emerald-200 dark:border-surface-700 dark:bg-surface-900 dark:text-surface-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-semibold">Iâ€™m a Partner</div>
+                          <div className="text-sm opacity-75">Offer services, accept work, and get paid securely</div>
+                        </div>
+                        <div className="text-xl">ðŸ¤</div>
+                      </div>
+                    </button>
+                  </div>
+
+                  <button type="button" onClick={handleNext} className="btn-gradient w-full btn-lg group">
+                    <span className="flex items-center justify-center gap-2">
+                      Continue
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    </span>
+                  </button>
+                </>
+              )}
+
+              {step === 2 && (
+                <>
                   <div>
                     <label htmlFor="name" className="label">Full Name</label>
                     <div className="relative">
@@ -155,7 +216,7 @@ export function RegisterPage() {
                 </>
               )}
 
-              {step === 2 && (
+              {step === 3 && (
                 <>
                   <div>
                     <label htmlFor="phone" className="label">Phone Number</label>
@@ -185,7 +246,7 @@ export function RegisterPage() {
                     {errors.confirmPassword && <p className="mt-2 text-xs text-danger-500 font-medium">{errors.confirmPassword.message}</p>}
                   </div>
                   <div className="flex gap-3">
-                    <button type="button" onClick={() => setStep(1)} className="btn-outline flex-1">
+                    <button type="button" onClick={() => setStep(2)} className="btn-outline flex-1">
                       <ArrowLeft className="w-4 h-4" />
                       Back
                     </button>
@@ -199,22 +260,27 @@ export function RegisterPage() {
                 </>
               )}
 
-              {step === 3 && (
+              {step === 4 && (
                 <>
                   <div className="glass-card-sm p-5 space-y-4 text-sm">
                     <div className="flex justify-between items-center">
+                      <span className="text-surface-500">Account Type</span>
+                      <span className="font-semibold text-surface-900 dark:text-white">{accountType === 'PARTNER' ? 'Partner' : 'User'}</span>
+                    </div>
+                    <div className="h-px bg-surface-200 dark:bg-surface-700" />
+                    <div className="flex justify-between items-center">
                       <span className="text-surface-500">Name</span>
-                      <span className="font-semibold text-surface-900 dark:text-white">{watch('name') || '—'}</span>
+                      <span className="font-semibold text-surface-900 dark:text-white">{watch('name') || 'â€”'}</span>
                     </div>
                     <div className="h-px bg-surface-200 dark:bg-surface-700" />
                     <div className="flex justify-between items-center">
                       <span className="text-surface-500">Email</span>
-                      <span className="font-semibold text-surface-900 dark:text-white">{watch('email') || '—'}</span>
+                      <span className="font-semibold text-surface-900 dark:text-white">{watch('email') || 'â€”'}</span>
                     </div>
                     <div className="h-px bg-surface-200 dark:bg-surface-700" />
                     <div className="flex justify-between items-center">
                       <span className="text-surface-500">Phone</span>
-                      <span className="font-semibold text-surface-900 dark:text-white">{watch('phone') || '—'}</span>
+                      <span className="font-semibold text-surface-900 dark:text-white">{watch('phone') || 'â€”'}</span>
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
@@ -233,7 +299,7 @@ export function RegisterPage() {
                   </div>
                   {errors.terms && <p className="text-xs text-danger-500 font-medium">{errors.terms.message}</p>}
                   <div className="flex gap-3">
-                    <button type="button" onClick={() => setStep(2)} className="btn-outline flex-1">
+                    <button type="button" onClick={() => setStep(3)} className="btn-outline flex-1">
                       <ArrowLeft className="w-4 h-4" />
                       Back
                     </button>
@@ -254,6 +320,22 @@ export function RegisterPage() {
                 </>
               )}
             </form>
+
+            {isClerkConfigured() && (
+              <div className="mt-5">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="h-px flex-1 bg-surface-200 dark:bg-surface-700" />
+                  <span className="text-xs text-surface-400">or</span>
+                  <div className="h-px flex-1 bg-surface-200 dark:bg-surface-700" />
+                </div>
+                <Link
+                  to="/sign-up"
+                  className="w-full py-3 rounded-xl border border-surface-300 dark:border-surface-600 text-sm font-semibold text-surface-700 dark:text-surface-200 hover:border-primary-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors flex items-center justify-center"
+                >
+                  Sign up with Clerk&nbsp;Â·&nbsp;Google, OTP & more
+                </Link>
+              </div>
+            )}
           </div>
 
           {/* Footer */}

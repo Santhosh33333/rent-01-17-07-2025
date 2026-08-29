@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { Search, Users, Calendar, MessageCircle, Footprints, Sparkles, X, Clock, ChevronLeft, ChevronRight } from 'lucide-react'
-import { api } from '../../lib/api'
+import { api, assetUrl } from '../../lib/api'
 import { AnimatedPage } from '../../components/AnimatedPage'
 import { PageHeader } from '../../components/PageHeader'
 import { EmptyState } from '../../components/EmptyState'
@@ -276,7 +276,7 @@ export function SearchPage() {
                       {/* Icon */}
                       <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-surface-100 dark:bg-surface-800 flex items-center justify-center text-surface-600 dark:text-surface-400 group-hover:scale-110 transition-transform">
                         {result.imageUrl ? (
-                          <img src={result.imageUrl} alt={result.title} className="w-full h-full rounded-xl object-cover" />
+                          <img src={assetUrl(result.imageUrl) || ''} alt={result.title} className="w-full h-full rounded-xl object-cover" />
                         ) : (
                           getResultIcon(result.type)
                         )}

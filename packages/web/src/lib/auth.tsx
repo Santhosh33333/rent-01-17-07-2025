@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
 import { api } from './api'
+import { disconnectGlobalSocket } from '../hooks/useSocket'
+import type { RegisterInput } from '../types/api'
 
 interface User {
   id: string
@@ -8,20 +10,25 @@ interface User {
   phone?: string
   role?: string
   activeRole?: string
+  accountType?: string
   isVerified?: boolean
   trustScore?: number
+  kycStatus?: string
+  kycRejectionReason?: string | null
+  partnerStatus?: string | null
   fullName?: string
   city?: string
   bio?: string
   country?: string
   gender?: string
+  avatarUrl?: string
 }
 
 interface AuthContextType {
   user: User | null
   loading: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (data: any) => Promise<void>
+  register: (data: RegisterInput) => Promise<void>
   logout: () => void
   updateUser: (data: Partial<User>) => void
   refreshProfile: () => Promise<void>
@@ -29,31 +36,43 @@ interface AuthContextType {
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-function buildUserFromPayload(payload: any, fallbackName?: string): User {
-  const rawRole = payload?.role || payload?.activeRole || 'USER'
+function buildUserFromPayload(payload: Record<string, unknown>, fallbackName?: string): User {
+  const rawRole = (payload?.role || payload?.activeRole || 'USER') as string
   const role = normalizeRole(rawRole)
+  const accountType = normalizeRole((payload?.accountType || payload?.userType || payload?.activeRole || payload?.role || 'USER') as string)
   return {
-    id: payload?.id || `local-${Date.now()}`,
-    email: payload?.email || fallbackName || 'user@rentbuddy.local',
-    name: payload?.fullName || payload?.name || fallbackName || 'RentBuddy User',
-    phone: payload?.phone,
+    id: (payload?.id as string) || `local-${Date.now()}`,
+    email: (payload?.email as string) || fallbackName || 'user@rentbuddy.local',
+    name: (payload?.fullName as string) || (payload?.name as string) || fallbackName || 'RentBuddy User',
+    phone: payload?.phone as string,
     role,
-    activeRole: normalizeRole(payload?.activeRole || payload?.role || role),
-    isVerified: Boolean(payload?.emailVerified || payload?.mobileVerified),
-    trustScore: payload?.trustScore,
-    fullName: payload?.fullName || payload?.name || fallbackName || 'RentBuddy User',
-    city: payload?.city,
-    bio: payload?.bio,
-    country: payload?.country,
-    gender: payload?.gender,
+    activeRole: normalizeRole((payload?.activeRole || payload?.role || role) as string),
+    accountType,
+    isVerified: Boolean(payload?.isVerified || payload?.emailVerified || payload?.mobileVerified),
+    trustScore: payload?.trustScore as number,
+    kycStatus: payload?.kycStatus as string,
+    kycRejectionReason: (payload?.kycRejectionReason as string) ?? null,
+    partnerStatus: (payload?.partnerStatus as string) ?? null,
+    fullName: (payload?.fullName as string) || (payload?.name as string) || fallbackName || 'RentBuddy User',
+    city: payload?.city as string,
+    bio: payload?.bio as string,
+    country: payload?.country as string,
+    gender: payload?.gender as string,
+    avatarUrl: payload?.avatarUrl as string,
   }
 }
 
 function clearSessionData(): void {
+  // Session/auth state
   localStorage.removeItem('token')
   localStorage.removeItem('refreshToken')
   localStorage.removeItem('user')
   localStorage.removeItem('activeRole')
+  // Routing-state flags must not leak to the next user on a shared device.
+  // NOTE: 'theme' / UI prefs intentionally persist — they are device settings,
+  // not session state.
+  localStorage.removeItem('onboarding_complete')
+  localStorage.removeItem('profile_complete')
 }
 
 function isDemoSessionToken(value: string | null): boolean {
@@ -73,7 +92,7 @@ function loadUser(): User | null {
   return null
 }
 
-function normalizeRole(raw: any): string {
+function normalizeRole(raw: string | null | undefined): string {
   if (!raw) return 'USER'
   return String(raw).toUpperCase().replace(/\s+/g, '_')
 }
@@ -105,8 +124,12 @@ async function restoreSessionFromRefreshToken(): Promise<User | null> {
     phone: p.phone,
     role: normalizeRole(p.role),
     activeRole: normalizeRole(p.activeRole || p.role),
+    accountType: normalizeRole(p.accountType || p.userType || p.activeRole || p.role),
     isVerified: p.emailVerified || p.mobileVerified,
     trustScore: p.trustScore,
+    kycStatus: p.kycStatus,
+    kycRejectionReason: p.kycRejectionReason ?? null,
+    partnerStatus: p.partnerStatus ?? null,
     fullName: p.fullName,
     city: p.city,
     bio: p.bio,
@@ -185,6 +208,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: apiUser?.email || email,
         id: apiUser?.id || `user-${Date.now()}`,
         role: apiUser?.role || 'USER',
+        activeRole: apiUser?.activeRole || apiUser?.role || 'USER',
+        accountType: apiUser?.accountType || apiUser?.userType || apiUser?.activeRole || apiUser?.role || 'USER',
       },
       email
     )
@@ -196,7 +221,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(u)
   }
 
-  const register = async (data: any) => {
+  const register = async (data: RegisterInput) => {
     const payload = {
       fullName: data.fullName || data.name,
       email: data.email,
@@ -233,6 +258,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         fullName: apiUser?.fullName || payload.fullName,
         role: apiUser?.role || 'USER',
         activeRole: apiUser?.activeRole || apiUser?.role || 'USER',
+        accountType: apiUser?.accountType || apiUser?.userType || apiUser?.activeRole || apiUser?.role || 'USER',
       },
       payload.fullName || payload.email
     )
@@ -250,6 +276,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       api.post('/auth/logout', { refreshToken }).catch(() => {})
     }
     clearSessionData()
+    // Tear down the realtime socket so the session doesn't stay alive server-side
+    disconnectGlobalSocket()
     setUser(null)
   }
 

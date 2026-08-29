@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { authenticateToken } from '../middleware/auth'
 import {
   getNotifications,
   markAsRead,
@@ -8,6 +9,9 @@ import {
 } from '../controllers/notificationController'
 
 const router = Router()
+
+// All notification endpoints require an authenticated user
+router.use(authenticateToken)
 
 /**
  * Get user notifications with pagination and filtering

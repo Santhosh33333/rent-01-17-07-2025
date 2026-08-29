@@ -3,7 +3,7 @@ import { prisma } from "../config/database";
 // Default pricing constants
 const DEFAULT_BASE_FEE = 50; // ₹50 for first 30 minutes
 const DEFAULT_PER_MINUTE_AFTER_30 = 2; // ₹2 per additional minute
-const DEFAULT_PLATFORM_FEE_PERCENT = 1; // 1% platform fee
+const DEFAULT_PLATFORM_FEE_PERCENT = 10; // 10% platform fee (matches booking engine default)
 const DEFAULT_PEAK_HOUR_MULTIPLIER = 1.5;
 const DEFAULT_FESTIVAL_MULTIPLIER = 2.0;
 const DEFAULT_RAIN_SURCHARGE = 20; // ₹20 flat
@@ -59,7 +59,7 @@ export interface PartnerEarningSummary {
   levelPoints: number;
 }
 
-async function getConfig(key: string, defaultValue: number): Promise<number> {
+export async function getConfig(key: string, defaultValue: number): Promise<number> {
   try {
     const config = await prisma.pricingConfig.findUnique({ where: { key } });
     if (config && config.isActive) {

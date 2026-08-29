@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { sendOTPEmail } from "../services/emailService";
 
 const OTP_LENGTH = 6;
 
@@ -26,15 +27,19 @@ export interface OtpChannel {
   phone?: string;
 }
 
-export function sendOTP(otp: string, channel: OtpChannel): void {
-  // Mock implementation — replace with SMS/email provider integration.
+export async function sendOTP(otp: string, channel: OtpChannel): Promise<void> {
   if (channel.email) {
-    console.log(`[OTP] Sending OTP ${otp} to email ${channel.email}`);
+    await sendOTPEmail(channel.email, otp, "verification");
   }
   if (channel.phone) {
-    console.log(`[OTP] Sending OTP ${otp} to phone ${channel.phone}`);
+    // TODO: integrate SMS provider (Twilio, etc.)
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[OTP] SMS not configured — delivery skipped`);
+    }
   }
   if (!channel.email && !channel.phone) {
-    console.log(`[OTP] Generated OTP ${otp} (no delivery channel provided)`);
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[OTP] No delivery channel provided`);
+    }
   }
 }

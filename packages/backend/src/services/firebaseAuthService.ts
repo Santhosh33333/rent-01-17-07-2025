@@ -22,7 +22,6 @@ export function initializeFirebaseAuth(): void {
     }
     
     firebaseAuth = getAuth(firebaseApp);
-    console.log("Firebase Auth initialized successfully.");
   } catch (err) {
     console.warn("Failed to initialize Firebase Auth:", err);
   }

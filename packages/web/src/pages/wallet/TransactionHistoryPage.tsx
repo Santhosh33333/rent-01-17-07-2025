@@ -22,7 +22,8 @@ export function TransactionHistoryPage() {
   const { loading, error, retry } = useAsync(
     async () => {
       const res = await api.get('/wallet/transactions')
-      const data = res.data?.data || res.data || []
+      const raw = res.data?.data || res.data || []
+      const data: Transaction[] = Array.isArray(raw) ? raw : (raw.items || [])
       setTransactions(data)
       return data
     },

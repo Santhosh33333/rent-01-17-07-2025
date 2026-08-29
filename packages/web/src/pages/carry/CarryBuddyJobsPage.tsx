@@ -44,7 +44,8 @@ export function CarryBuddyJobsPage() {
           ? '/carry-buddy/requests'
           : '/carry-buddy/my-requests'
         const res = await api.get(endpoint)
-        const data = Array.isArray(res.data) ? res.data : res.data?.data ?? []
+        const root = res.data
+        const data = (Array.isArray(root) ? root : (root?.data?.items ?? root?.data ?? [])) || []
         const filtered = activeTab === 'completed'
           ? data.filter((j: CarryJob) => j.status === 'completed')
           : activeTab === 'active'
@@ -63,7 +64,7 @@ export function CarryBuddyJobsPage() {
   const handleAccept = async (jobId: string) => {
     setAcceptingId(jobId)
     try {
-      await api.post(`/carry-buddy/accept/${jobId}`)
+      await api.post(`/carry-buddy/${jobId}/accept`)
       setJobs((prev) => prev.filter((j) => j._id !== jobId))
     } catch {
       // silently fail — user can retry

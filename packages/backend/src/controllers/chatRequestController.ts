@@ -110,6 +110,21 @@ export async function sendChatRequest(req: AuthedRequest, res: Response): Promis
       return;
     }
 
+    // Already-connected pairs must never mint another request — accepting it
+    // would violate @@unique([senderId, receiverId, status]) with ACCEPTED.
+    const existingAccepted = await prisma.chatRequest.findFirst({
+      where: {
+        OR: [
+          { senderId, receiverId, status: "ACCEPTED" },
+          { senderId: receiverId, receiverId: senderId, status: "ACCEPTED" },
+        ],
+      },
+    });
+    if (existingAccepted) {
+      sendError(res, "You are already connected with this user.", 409, "ALREADY_CONNECTED");
+      return;
+    }
+
     const rejectedRequest = await prisma.chatRequest.findFirst({
       where: { senderId, receiverId, status: "REJECTED", cooldownUntil: { gt: now } },
     });
@@ -167,8 +182,39 @@ export async function acceptChatRequest(req: AuthedRequest, res: Response): Prom
       return;
     }
     if (new Date() > chatRequest.expiresAt) {
-      await prisma.chatRequest.update({ where: { id }, data: { status: "EXPIRED" } });
+      // Collapse onto an existing EXPIRED tombstone for this pair to respect
+      // @@unique([senderId, receiverId, status]) instead of crashing
+      const olderExpired = await prisma.chatRequest.findFirst({
+        where: {
+          senderId: chatRequest.senderId,
+          receiverId: chatRequest.receiverId,
+          status: "EXPIRED",
+          NOT: { id: chatRequest.id },
+        },
+      });
+      if (olderExpired) {
+        await prisma.chatRequest.delete({ where: { id: chatRequest.id } });
+      } else {
+        await prisma.chatRequest.update({ where: { id }, data: { status: "EXPIRED" } });
+      }
       sendError(res, "This request has expired.", 410, "EXPIRED");
+      return;
+    }
+
+    // Defensive: an ACCEPTED row for this pair already exists (e.g. legacy data
+    // or a race) — accepting would violate the pair-level unique constraint.
+    const existingAccepted = await prisma.chatRequest.findFirst({
+      where: {
+        OR: [
+          { senderId: chatRequest.senderId, receiverId: chatRequest.receiverId, status: "ACCEPTED" },
+          { senderId: chatRequest.receiverId, receiverId: chatRequest.senderId, status: "ACCEPTED" },
+        ],
+        NOT: { id: chatRequest.id },
+      },
+    });
+    if (existingAccepted) {
+      await prisma.chatRequest.delete({ where: { id: chatRequest.id } }).catch(() => {});
+      sendError(res, "You are already connected with this user.", 409, "ALREADY_CONNECTED");
       return;
     }
 
@@ -180,6 +226,25 @@ export async function acceptChatRequest(req: AuthedRequest, res: Response): Prom
         receiver: { select: { id: true, fullName: true, avatarUrl: true } },
       },
     });
+
+    // Provision the canonical chat thread for the newly connected pair.
+    // Conversation rows use an ordered participant pair under
+    // @@unique([participant1Id, participant2Id]); upsert keeps replays safe.
+    const [p1, p2] = [updated.senderId, updated.receiverId].sort();
+    await prisma.conversation.upsert({
+      where: { participant1Id_participant2Id: { participant1Id: p1, participant2Id: p2 } },
+      update: {},
+      create: { participant1Id: p1, participant2Id: p2 },
+    }).catch(() => {});
+
+    await prisma.notification.create({
+      data: {
+        userId: updated.senderId,
+        title: "Chat request accepted",
+        body: `${updated.receiver.fullName} accepted your chat request.`,
+        data: JSON.stringify({ kind: "CHAT_REQUEST_ACCEPTED", chatRequestId: updated.id }),
+      },
+    }).catch(() => {});
 
     sendSuccess(res, { chatRequest: updated }, "Chat request accepted.");
   } catch (err: any) {
@@ -216,14 +281,46 @@ export async function rejectChatRequest(req: AuthedRequest, res: Response): Prom
     const cooldownUntil = new Date();
     cooldownUntil.setDate(cooldownUntil.getDate() + receiverSettings.cooldownDaysAfterReject);
 
-    const updated = await prisma.chatRequest.update({
-      where: { id },
-      data: { status: "REJECTED", rejectedAt: new Date(), cooldownUntil },
-      include: {
-        sender: { select: { id: true, fullName: true, avatarUrl: true } },
-        receiver: { select: { id: true, fullName: true, avatarUrl: true } },
+    // The pair-level unique constraint @@unique([senderId, receiverId, status])
+    // allows only ONE REJECTED row per sender/receiver pair. If an older
+    // tombstone exists (previous rejection cycle), collapse this rejection
+    // into it instead of crashing with P2002 on a second update.
+    const olderTombstone = await prisma.chatRequest.findFirst({
+      where: {
+        senderId: chatRequest.senderId,
+        receiverId: chatRequest.receiverId,
+        status: "REJECTED",
+        NOT: { id: chatRequest.id },
       },
     });
+
+    let updated;
+    if (olderTombstone) {
+      await prisma.$transaction([
+        prisma.chatRequest.delete({ where: { id: chatRequest.id } }),
+        prisma.chatRequest.update({
+          where: { id: olderTombstone.id },
+          data: { rejectedAt: new Date(), cooldownUntil },
+        }),
+      ]);
+      updated = { ...chatRequest, status: "REJECTED", rejectedAt: new Date(), cooldownUntil };
+    } else {
+      const claimed = await prisma.chatRequest.updateMany({
+        where: { id, receiverId: userId, status: "PENDING" },
+        data: { status: "REJECTED", rejectedAt: new Date(), cooldownUntil },
+      });
+      if (claimed.count !== 1) {
+        sendError(res, "This request is no longer pending.", 400, "INVALID_STATUS");
+        return;
+      }
+      updated = await prisma.chatRequest.findUnique({
+        where: { id },
+        include: {
+          sender: { select: { id: true, fullName: true, avatarUrl: true } },
+          receiver: { select: { id: true, fullName: true, avatarUrl: true } },
+        },
+      });
+    }
 
     sendSuccess(res, { chatRequest: updated }, "Chat request rejected.");
   } catch (err: any) {
@@ -305,11 +402,32 @@ export async function getChatRequestCounts(req: AuthedRequest, res: Response): P
 
 export async function expireStaleRequests(_req: AuthedRequest, res: Response): Promise<void> {
   try {
-    const result = await prisma.chatRequest.updateMany({
+    const stale = await prisma.chatRequest.findMany({
       where: { status: "PENDING", expiresAt: { lt: new Date() } },
-      data: { status: "EXPIRED" },
+      select: { id: true, senderId: true, receiverId: true },
     });
-    sendSuccess(res, { expired: result.count }, "Stale requests expired.");
+
+    let expired = 0;
+    for (const request of stale) {
+      try {
+        // Per-row: a pair-level unique violation (older EXPIRED tombstone)
+        // must not abort the whole batch
+        await prisma.chatRequest.update({
+          where: { id: request.id },
+          data: { status: "EXPIRED" },
+        });
+        expired++;
+      } catch (err: any) {
+        if (err?.code === "P2002") {
+          await prisma.chatRequest.delete({ where: { id: request.id } }).catch(() => {});
+          expired++;
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    sendSuccess(res, { expired }, "Stale requests expired.");
   } catch (err: any) {
     console.error("expireStaleRequests error:", err);
     sendError(res, "Failed to expire stale requests.", 500, "INTERNAL_ERROR");

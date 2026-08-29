@@ -1,12 +1,12 @@
 import { Router } from "express";
 import { body } from "express-validator";
-import { authenticateToken } from "../middleware/auth";
+import { authenticateToken, requireKycVerified } from "../middleware/auth";
 import { sanitizeInput, validateRequest } from "../middleware/validation";
 import * as messageController from "../controllers/messageController";
 
 const router = Router();
 
-router.use(authenticateToken);
+router.use(authenticateToken, requireKycVerified);
 
 // Send message
 router.post(
@@ -23,6 +23,9 @@ router.post(
 // Get conversations
 router.get("/conversations", messageController.getConversations);
 
+// Unread counts (total + per conversation)
+router.get("/unread", messageController.getUnreadCounts);
+
 // Get messages in conversation
 router.get("/:conversationId", messageController.getMessages);
 
@@ -33,3 +36,4 @@ router.post("/:id/read", messageController.markAsRead);
 router.delete("/:id", messageController.deleteMessage);
 
 export default router;
+

@@ -1,7 +1,6 @@
 import { Request, Response } from 'express'
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
+import { prisma } from '../config/database'
+import { AuthedRequest } from '../middleware/authTypes'
 
 interface SearchResult {
   type: 'user' | 'event' | 'community' | 'booking'
@@ -18,7 +17,7 @@ interface SearchResult {
  * Universal search across all entities with pagination
  * GET /search?q=keyword&filter=all|users|events|communities&page=1&limit=20
  */
-export async function search(req: Request, res: Response) {
+export async function search(req: AuthedRequest, res: Response) {
   try {
     const { q, filter = 'all', page = '1', limit = '20' } = req.query
     const query = String(q || '').trim().toLowerCase()
@@ -37,47 +36,35 @@ export async function search(req: Request, res: Response) {
     const results: SearchResult[] = []
     let totalCount = 0
 
-    // Search users
+    // Search users (name-only matching; ACTIVE accounts only; NO PII in results)
     if (filter === 'all' || filter === 'users') {
+      const userWhere = {
+        status: 'ACTIVE',
+        fullName: { contains: query },
+      }
+
       const [userResults, userCount] = await Promise.all([
         prisma.user.findMany({
-          where: {
-            OR: [
-              { fullName: { contains: query } },
-              { email: { contains: query } },
-              { phone: { contains: query } },
-            ]
-          },
+          where: userWhere,
           select: {
             id: true,
             fullName: true,
-            email: true,
             avatarUrl: true,
-            status: true,
           },
           skip: filter === 'users' ? skip : 0,
           take: filter === 'users' ? pageSize : pageSize,
         }),
-        prisma.user.count({
-          where: {
-            OR: [
-              { fullName: { contains: query } },
-              { email: { contains: query } },
-              { phone: { contains: query } },
-            ]
-          }
-        })
+        prisma.user.count({ where: userWhere })
       ])
 
       results.push(...userResults.map(u => ({
         type: 'user' as const,
         id: u.id,
         title: u.fullName || 'Anonymous',
-        subtitle: u.email,
-        description: u.status === 'ACTIVE' ? 'Active' : u.status,
+        subtitle: 'User',
         imageUrl: u.avatarUrl || undefined,
         link: `/profile/${u.id}`,
-        metadata: { status: u.status }
+        metadata: {}
       })))
 
       if (filter === 'users') {
@@ -279,9 +266,9 @@ export async function getSuggestions(req: Request, res: Response) {
 
     const suggestions: string[] = []
 
-    // Get user name suggestions
+    // Get user name suggestions (ACTIVE accounts only)
     const users = await prisma.user.findMany({
-      where: { fullName: { contains: query } },
+      where: { fullName: { contains: query }, status: 'ACTIVE' },
       select: { fullName: true },
       take: 3,
     })

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Wallet, IndianRupee, CheckCircle, ArrowLeft, Zap } from 'lucide-react'
+import { Wallet, IndianRupee, CheckCircle, ArrowLeft, Zap, AlertCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { openRazorpayCheckout } from '../../lib/razorpay'
@@ -16,6 +16,7 @@ export function TopUpPage() {
   const [balance, setBalance] = useState<number | null>(null)
   const [success, setSuccess] = useState(false)
   const [creditedAmount, setCreditedAmount] = useState(0)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchBalance = async () => {
@@ -47,6 +48,7 @@ export function TopUpPage() {
   const handleTopUp = () => {
     if (amount < 10) return
     setLoading(true)
+    setError(null)
 
     openRazorpayCheckout({
       amount,
@@ -62,16 +64,19 @@ export function TopUpPage() {
           setSuccess(true)
           setBalance((prev) => (prev !== null ? prev + amount : null))
         } catch {
+          setError('Payment verification failed. Please contact support if ₹' + amount + ' was debited.')
+        } finally {
           setLoading(false)
-          alert('Payment verification failed. Please contact support.')
         }
       },
-      onError: () => {
+      onError: (err: any) => {
         setLoading(false)
+        const cancelled = err?.message?.toLowerCase().includes('cancel')
+        if (!cancelled) {
+          setError(err?.message || 'Payment could not be completed. Please try again.')
+        }
       },
     })
-
-    setLoading(false)
   }
 
   if (success) {
@@ -186,6 +191,13 @@ export function TopUpPage() {
 
           {amount > 0 && amount < 10 && (
             <p className="text-red-500 text-sm mb-4 text-center">Minimum amount is ₹10</p>
+          )}
+
+          {error && (
+            <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            </div>
           )}
 
           <button

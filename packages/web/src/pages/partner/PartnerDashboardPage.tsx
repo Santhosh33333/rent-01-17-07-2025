@@ -269,7 +269,7 @@ export function PartnerDashboardPage() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { to: '/partner/jobs', icon: ClipboardList, label: 'Jobs', gradient: 'from-emerald-500 to-emerald-600' },
-            { to: '/partner/nearby', icon: Navigation, label: 'Nearby', gradient: 'from-sky-500 to-blue-600' },
+            { to: '/partner/map', icon: Navigation, label: 'Nearby', gradient: 'from-sky-500 to-blue-600' },
             { to: '/partner/wallet', icon: Wallet, label: 'Wallet', gradient: 'from-amber-500 to-orange-600' },
             { to: '/partner/performance', icon: TrendingUp, label: 'Analytics', gradient: 'from-violet-500 to-violet-600' },
           ].map(a => (

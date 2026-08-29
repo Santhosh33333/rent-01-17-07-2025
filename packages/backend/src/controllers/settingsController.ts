@@ -72,8 +72,11 @@ export async function updateSettings(req: AuthedRequest, res: Response): Promise
   try {
     const userId = req.user!.userId;
     const updates = req.body;
+    // Whitelist: only accept known setting keys to prevent arbitrary data injection
+    const allowedKeys = Object.keys(DEFAULT_SETTINGS);
     const upserts: Promise<any>[] = [];
     for (const [key, value] of Object.entries(updates)) {
+      if (!allowedKeys.includes(key)) continue; // silently skip unknown keys
       const dataType = typeof value === "boolean" ? "BOOLEAN" : "STRING";
       upserts.push(
         prisma.appSettings.upsert({

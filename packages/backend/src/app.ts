@@ -7,10 +7,12 @@ import http from "http";
 
 import { env } from "./config/env";
 import { generalRateLimiter } from "./middleware/rateLimiter";
+import { requireDocumentAccess } from "./middleware/fileAccess";
 import { sendError } from "./utils/response";
 
 import authRoutes from "./routes/authRoutes";
 import userRoutes from "./routes/userRoutes";
+import { SERVICE_CATALOG } from "./services/serviceCatalog";
 import verificationRoutes from "./routes/verificationRoutes";
 import walkingPartnerRoutes from "./routes/walkingPartnerRoutes";
 import walletRoutes from "./routes/walletRoutes";
@@ -36,6 +38,8 @@ import paymentRoutes from "./routes/paymentRoutes";
 import bookingRoutes from "./routes/bookingRoutes";
 import partnerRoutes from "./routes/partnerRoutes";
 import searchRoutes from "./routes/searchRoutes";
+import discoveryRoutes from "./routes/discoveryRoutes";
+import referralRoutes from "./routes/referralRoutes";
 
 export function createApp(): http.Server {
   const app = express();
@@ -44,10 +48,35 @@ export function createApp(): http.Server {
     .map((value) => value.trim())
     .filter(Boolean);
 
-  app.use(helmet());
+  const isLocalDevOrigin = (origin: string): boolean => {
+    try {
+      const url = new URL(origin);
+      return (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1") && url.protocol === "http:";
+    } catch {
+      return false;
+    }
+  };
+
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "https://checkout.razorpay.com", "https://accounts.google.com", "https://js.clerk.com"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://*.clerk.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "https://*.clerk.com"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'", "https://api.clerk.com", "https://*.razorpay.com"],
+        frameSrc: ["'self'", "https://checkout.razorpay.com", "https://accounts.google.com", "https://*.clerk.com"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+  }));
   app.use(cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || allowedOrigins.includes(origin) || isLocalDevOrigin(origin)) {
         callback(null, true);
         return;
       }
@@ -60,7 +89,9 @@ export function createApp(): http.Server {
   app.use(morgan(env.isProduction ? "combined" : "dev"));
   app.use(generalRateLimiter);
 
-  app.use("/uploads", express.static(path.resolve(process.cwd(), env.UPLOAD_DIR), {
+  // KYC documents under uploads/private require ownership or an admin role;
+  // everything else (e.g. avatars) remains publicly served static content.
+  app.use("/uploads", requireDocumentAccess, express.static(path.resolve(process.cwd(), env.UPLOAD_DIR), {
     maxAge: "7d",
     etag: true,
     lastModified: true,
@@ -99,9 +130,17 @@ export function createApp(): http.Server {
   app.use("/api/chat-requests", chatRequestRoutes);
   app.use("/api/privacy", privacyRoutes);
   app.use("/api/payments", paymentRoutes);
-  app.use("/api/bookings", bookingRoutes);
-  app.use("/api/partner", partnerRoutes);
+app.use("/api/bookings", bookingRoutes);
+app.use("/api/partner", partnerRoutes);
+app.use("/api/discovery", discoveryRoutes);
+  // Public service catalog (Expanded Partner Ecosystem) — registered BEFORE the
+  // /api search router (which applies auth globally) so it stays unauthenticated.
+  app.get("/api/services", (_req: Request, res: Response) => {
+    res.json({ success: true, data: SERVICE_CATALOG });
+  });
+
   app.use("/api", searchRoutes);
+  app.use("/api/referrals", referralRoutes);
 
   app.use((req: Request, res: Response) => {
     sendError(res, `Route not found: ${req.method} ${req.path}`, 404, "NOT_FOUND");

@@ -6,21 +6,24 @@ import { VerificationBadge } from '../../components/VerificationBadge'
 import { TrustScoreDisplay } from '../../components/TrustScoreDisplay'
 import { AnimatedPage } from '../../components/AnimatedPage'
 import { GlassCard } from '../../components/GlassCard'
+import { RoleSwitcher } from '../../components/RoleSwitcher'
+import { useRole } from '../../lib/roleContext'
 import {
   User, Mail, Phone, Camera, Save, X, Shield,
   LogOut, ChevronRight, MapPin, Calendar, Award, Edit3,
-  Clock, AlertTriangle, Sparkles, Settings, Lock
+  Clock, AlertTriangle, Sparkles, Settings, Lock, Repeat
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { api } from '../../lib/api'
+import { api, assetUrl } from '../../lib/api'
 
 export function ProfilePage() {
   const { user, updateUser, logout } = useAuth()
+  const { approvedRoles, activeRole } = useRole()
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
-  const [profileStats, setProfileStats] = useState<any>(null)
-  const [verificationStatus, setVerificationStatus] = useState<any>(null)
+  const [profileStats, setProfileStats] = useState<{ walksCompleted?: number; eventsJoined?: number; averageRating?: number; joinedYear?: number } | null>(null)
+  const [verificationStatus, setVerificationStatus] = useState<Record<string, unknown> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { register, handleSubmit, formState: { errors } } = useForm({
@@ -36,10 +39,17 @@ export function ProfilePage() {
     api.get('/verification/status').then(r => setVerificationStatus(r.data.data)).catch(() => {})
   }, [])
 
-  const onSubmit = async (data: any) => {
+  const onSubmit = async (data: { name?: string; email?: string; phone?: string; bio?: string; city?: string; country?: string; gender?: string }) => {
     setSaving(true)
     try {
-      await updateUser(data)
+      await api.put('/users/profile', {
+        fullName: data.name,
+        bio: data.bio,
+        city: data.city,
+        country: data.country,
+        gender: data.gender,
+      })
+      updateUser({ name: data.name, email: data.email, phone: data.phone })
       setEditing(false)
       toast.success('Profile updated successfully')
     } catch {
@@ -61,7 +71,7 @@ export function ProfilePage() {
       })
       const avatarUrl = res.data?.data?.avatarUrl
       if (avatarUrl) {
-        updateUser({ avatarUrl } as any)
+        updateUser({ avatarUrl })
         toast.success('Photo updated!')
       }
     } catch {
@@ -93,8 +103,8 @@ export function ProfilePage() {
 
           <div className="relative z-10 flex flex-col sm:flex-row items-center sm:items-start gap-6">
             <div className="relative group">
-              {(user as any)?.avatarUrl ? (
-                <img src={(user as any).avatarUrl} alt="avatar" className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl object-cover ring-4 ring-white/20" />
+              {user?.avatarUrl ? (
+                <img src={assetUrl(user.avatarUrl) || ''} alt="avatar" className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl object-cover ring-4 ring-white/20" />
               ) : (
                 <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl avatar flex items-center justify-center text-white text-3xl font-bold ring-4 ring-white/20">
                   {initials}
@@ -124,7 +134,7 @@ export function ProfilePage() {
             <div className="flex-1 text-center sm:text-left">
               <div className="flex items-center justify-center sm:justify-start gap-3 mb-1">
                 <h1 className="text-2xl sm:text-3xl font-bold font-display">{user?.name || 'User'}</h1>
-                <VerificationBadge status="verified" size="sm" />
+                <VerificationBadge status={(user?.kycStatus === 'VERIFIED' || user?.kycStatus === 'APPROVED') ? 'verified' : 'pending'} size="sm" />
               </div>
               <p className="text-white/60 text-sm mb-3">@{user?.email?.split('@')[0] || 'user'}</p>
               <div className="flex items-center justify-center sm:justify-start gap-4 text-sm text-white/60">
@@ -235,13 +245,23 @@ export function ProfilePage() {
                 <Shield className="w-4 h-4 text-emerald-500" /> Verification
               </h3>
               <div className="space-y-3">
-                {[
-                  { label: 'Email', status: user?.isVerified ? 'verified' as const : 'not-started' as const },
-                  { label: 'Mobile', status: user?.phone ? 'verified' as const : 'not-started' as const },
-                  { label: 'Selfie', status: verificationStatus?.selfieUrl ? (verificationStatus?.status === 'VERIFIED' ? 'verified' as const : verificationStatus?.status === 'REJECTED' ? 'rejected' as const : 'pending' as const) : 'not-started' as const },
-                  { label: 'Government ID', status: verificationStatus?.govIdUrl ? (verificationStatus?.status === 'VERIFIED' ? 'verified' as const : verificationStatus?.status === 'REJECTED' ? 'rejected' as const : 'pending' as const) : 'not-started' as const },
-                  { label: 'Address Proof', status: verificationStatus?.addressProofUrl ? (verificationStatus?.status === 'VERIFIED' ? 'verified' as const : verificationStatus?.status === 'REJECTED' ? 'rejected' as const : 'pending' as const) : 'not-started' as const },
-                ].map((item) => (
+                {(() => {
+                  // /verification/status returns booleans under `documents`
+                  // (with top-level fallbacks) — there are no *Url fields.
+                  const docs = (verificationStatus?.documents || {}) as Record<string, boolean>
+                  const has = (k: string, topKey: string) => Boolean(docs[k] ?? verificationStatus?.[topKey])
+                  const kycDone = verificationStatus?.status === 'VERIFIED'
+                  const kycRejected = verificationStatus?.status === 'REJECTED'
+                  const docStatus = (uploaded: boolean) =>
+                    uploaded ? (kycDone ? 'verified' as const : kycRejected ? 'rejected' as const : 'pending' as const) : 'not-started' as const
+                  return [
+                    { label: 'Email', status: user?.isVerified ? 'verified' as const : 'not-started' as const },
+                    { label: 'Mobile', status: user?.phone ? 'verified' as const : 'not-started' as const },
+                    { label: 'Selfie', status: docStatus(has('selfie', 'selfie')) },
+                    { label: 'Government ID', status: docStatus(has('govId', 'govId')) },
+                    { label: 'Address Proof', status: docStatus(has('addressProof', 'addressProof')) },
+                  ]
+                })().map((item) => (
                   <div key={item.label} className="flex items-center justify-between">
                     <span className="text-sm text-surface-600 dark:text-surface-400">{item.label}</span>
                     <VerificationBadge status={item.status} size="sm" />
@@ -252,6 +272,17 @@ export function ProfilePage() {
                 Complete Verification <ChevronRight className="w-3.5 h-3.5" />
               </Link>
             </GlassCard>
+
+            {/* Account Switching (USER <-> PARTNER, etc.) */}
+            {(approvedRoles.length > 1 || activeRole !== 'USER') && (
+              <GlassCard variant="elevated" padding="lg">
+                <h3 className="section-title text-sm flex items-center gap-2 mb-3">
+                  <Repeat className="w-4 h-4 text-primary-500" /> Account Type
+                </h3>
+                <p className="text-xs text-surface-500 mb-3">Switch between your accounts.</p>
+                <RoleSwitcher />
+              </GlassCard>
+            )}
 
             {/* Admin Access */}
             {isAdmin && (

@@ -1,12 +1,12 @@
 import { Router } from "express";
 import { body } from "express-validator";
-import { authenticateToken } from "../middleware/auth";
+import { authenticateToken, requireKycVerified } from "../middleware/auth";
 import { sanitizeInput, validateRequest } from "../middleware/validation";
 import * as communityController from "../controllers/communityController";
 
 const router = Router();
 
-router.use(authenticateToken);
+router.use(authenticateToken, requireKycVerified);
 
 // Create community
 router.post(
@@ -55,3 +55,4 @@ router.post("/:id/leave", communityController.leaveCommunity);
 router.get("/:id/members", communityController.getCommunityMembers);
 
 export default router;
+

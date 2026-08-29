@@ -30,6 +30,15 @@ export async function applyAsWalkingPartner(req: AuthedRequest, res: Response): 
       update: data,
     });
 
+    // Surface this applicant in the standard admin Partner pipeline so it can be
+    // reviewed and approved. Without this, walking-partner applications were
+    // orphaned (admins only see the Partner table) and could never be approved.
+    await prisma.partner.upsert({
+      where: { userId: req.user!.userId },
+      create: { userId: req.user!.userId, status: "APPLIED", providesWalking: true, providesCarry: false },
+      update: { status: "APPLIED", providesWalking: true },
+    });
+
     sendSuccess(res, undefined, "Application submitted for review.");
   } catch (err) {
     sendError(res, "Failed to apply as walking partner.", 500, "INTERNAL_ERROR");

@@ -28,9 +28,20 @@ export function EventsPage() {
   const { loading, error, retry } = useAsync(
     async () => {
       const res = await api.get('/events')
-      const data = res.data?.data || res.data || []
-      setEvents(Array.isArray(data) ? data : [])
-      return Array.isArray(data) ? data : []
+      const d = res.data?.data || res.data || {}
+      const raw = Array.isArray(d) ? d : d.items || []
+      const data = raw.map((ev: any) => ({
+        id: ev.id,
+        name: ev.title,
+        date: ev.startTime,
+        location: ev.location ?? 'TBA',
+        description: ev.description ?? '',
+        category: ev.category,
+        attendees: ev.attendeeCount ?? 0,
+        rsvp: !!ev.isRegistered,
+      }))
+      setEvents(data)
+      return data
     },
     true
   )

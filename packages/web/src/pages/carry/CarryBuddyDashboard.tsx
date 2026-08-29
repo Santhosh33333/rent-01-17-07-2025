@@ -45,8 +45,9 @@ export function CarryBuddyDashboard() {
         ])
 
         if (myRequestsRes.status === 'fulfilled') {
-          const data = Array.isArray(myRequestsRes.value.data) ? myRequestsRes.value.data : myRequestsRes.value.data?.data ?? []
-          setJobs(data.slice(0, 5))
+          const root = myRequestsRes.value.data
+          const items = (Array.isArray(root) ? root : (root?.data?.items ?? root?.data ?? []))
+          setJobs((Array.isArray(items) ? items : []).slice(0, 5))
         }
 
         if (statsRes.status === 'fulfilled') {

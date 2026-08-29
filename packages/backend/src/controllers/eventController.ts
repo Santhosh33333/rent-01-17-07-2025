@@ -1,7 +1,11 @@
 import { Response } from "express";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../config/database";
 import { sendSuccess, sendError } from "../utils/response";
 import { AuthedRequest } from "../middleware/authTypes";
+
+class EventAlreadyRegisteredError extends Error {}
+class EventFullError extends Error {}
 
 // ============================================================================
 // CREATE EVENT
@@ -79,7 +83,22 @@ export async function getEvents(req: AuthedRequest, res: Response): Promise<void
       attendeeCount: item._count.attendees,
     }));
 
-    sendSuccess(res, { items: itemsWithCounts, page, limit, total });
+    // Per-user registration flags so clients can render RSVP state in lists.
+    let registeredEventIds = new Set<string>();
+    if (items.length > 0) {
+      const mine = await prisma.eventAttendee.findMany({
+        where: { userId: req.user!.userId, eventId: { in: items.map(i => i.id) } },
+        select: { eventId: true },
+      });
+      registeredEventIds = new Set(mine.map(m => m.eventId));
+    }
+
+    sendSuccess(res, {
+      items: itemsWithCounts.map(i => ({ ...i, isRegistered: registeredEventIds.has(i.id) })),
+      page,
+      limit,
+      total,
+    });
   } catch (err: any) {
     sendError(res, "Failed to retrieve events.", 500, "INTERNAL_ERROR");
   }
@@ -224,6 +243,7 @@ export async function deleteEvent(req: AuthedRequest, res: Response): Promise<vo
 export async function registerForEvent(req: AuthedRequest, res: Response): Promise<void> {
   try {
     const { id } = req.params;
+    const userId = req.user!.userId;
 
     const event = await prisma.event.findUnique({ where: { id } });
 
@@ -232,38 +252,56 @@ export async function registerForEvent(req: AuthedRequest, res: Response): Promi
       return;
     }
 
-    if (event.capacity && event.attendeeCount >= event.capacity) {
-      sendError(res, "Event is at full capacity.", 400, "EVENT_FULL");
+    if (event.status === "CANCELLED") {
+      sendError(res, "This event has been cancelled.", 400, "EVENT_CANCELLED");
       return;
     }
 
-    const existing = await prisma.eventAttendee.findUnique({
-      where: { eventId_userId: { eventId: id, userId: req.user!.userId } },
-    });
+    try {
+      await prisma.$transaction(async (tx) => {
+        const existing = await tx.eventAttendee.findUnique({
+          where: { eventId_userId: { eventId: id, userId } },
+        });
+        if (existing) throw new EventAlreadyRegisteredError();
 
-    if (existing) {
-      sendError(res, "Already registered for this event.", 409, "ALREADY_REGISTERED");
-      return;
+        // Atomic capacity claim: the row only increments while below capacity,
+        // so concurrent registrations can never overbook.
+        const claimed = await tx.event.updateMany({
+          where: {
+            id,
+            ...(event.capacity !== null ? { attendeeCount: { lt: event.capacity } } : {}),
+          },
+          data: { attendeeCount: { increment: 1 } },
+        });
+        if (claimed.count === 0) throw new EventFullError();
+
+        await tx.eventAttendee.create({
+          data: { eventId: id, userId, status: "REGISTERED" },
+        });
+        await tx.auditLog.create({
+          data: {
+            actorId: userId,
+            actorType: "USER",
+            action: "EVENT_REGISTER",
+            entityType: "Event",
+            entityId: id,
+          },
+        });
+      });
+    } catch (txErr: any) {
+      if (txErr instanceof EventAlreadyRegisteredError || txErr?.code === "P2002") {
+        sendError(res, "Already registered for this event.", 409, "ALREADY_REGISTERED");
+        return;
+      }
+      if (txErr instanceof EventFullError) {
+        sendError(res, "Event is at full capacity.", 400, "EVENT_FULL");
+        return;
+      }
+      throw txErr;
     }
-
-    await prisma.$transaction([
-      prisma.eventAttendee.create({
-        data: { eventId: id, userId: req.user!.userId, status: "REGISTERED" },
-      }),
-      prisma.event.update({ where: { id }, data: { attendeeCount: { increment: 1 } } }),
-      prisma.auditLog.create({
-        data: {
-          actorId: req.user!.userId,
-          actorType: "USER",
-          action: "EVENT_REGISTER",
-          entityType: "Event",
-          entityId: id,
-        },
-      }),
-    ]);
 
     sendSuccess(res, undefined, "Registered for event.");
-  } catch (err: any) {
+  } catch (err) {
     sendError(res, "Failed to register for event.", 500, "INTERNAL_ERROR");
   }
 }

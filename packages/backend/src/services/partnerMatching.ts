@@ -9,7 +9,8 @@ export async function findAvailablePartners(serviceType: "WALKING" | "CARRY_BUDD
     where,
     include: {
       user: {
-        select: { id: true, fullName: true, avatarUrl: true, phone: true, city: true },
+        // Privacy: partner contact details stay private in discovery lists.
+        select: { id: true, fullName: true, avatarUrl: true, city: true },
       },
     },
     take: limit ?? 20,

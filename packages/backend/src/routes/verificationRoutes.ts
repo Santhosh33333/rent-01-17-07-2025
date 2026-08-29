@@ -2,7 +2,7 @@ import { Router } from "express";
 import { body } from "express-validator";
 import { authenticateToken } from "../middleware/auth";
 import { sanitizeInput, validateRequest } from "../middleware/validation";
-import { upload } from "../middleware/upload";
+import { privateUpload } from "../middleware/upload";
 import * as verificationController from "../controllers/verificationController";
 
 const router = Router();
@@ -29,7 +29,7 @@ router.post(
 // ============================================================================
 router.post(
   "/gov-id",
-  upload.single("govId"),
+  privateUpload.single("govId"),
   [body("govIdType").notEmpty().isIn(["AADHAAR", "PASSPORT", "DRIVING_LICENSE", "VOTER_ID", "PAN"]).withMessage("Valid document type is required")],
   validateRequest,
   verificationController.submitGovId
@@ -38,14 +38,14 @@ router.post(
 // ============================================================================
 // STEP 3: SELFIE VERIFICATION
 // ============================================================================
-router.post("/selfie", upload.single("selfie"), verificationController.submitSelfie);
+router.post("/selfie", privateUpload.single("selfie"), verificationController.submitSelfie);
 
 // ============================================================================
 // STEP 4: ADDRESS PROOF
 // ============================================================================
 router.post(
   "/address",
-  upload.single("addressProof"),
+  privateUpload.single("addressProof"),
   verificationController.submitAddressProof
 );
 

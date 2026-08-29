@@ -1,3 +1,4 @@
+﻿import { getErrorMessage } from '../../lib/error'
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
@@ -30,9 +31,9 @@ const STEPS = [
 ]
 
 const GENDER_OPTIONS = [
-  { value: 'MALE' as const, label: 'Male', emoji: '👨' },
-  { value: 'FEMALE' as const, label: 'Female', emoji: '👩' },
-  { value: 'OTHER' as const, label: 'Other', emoji: '🧑' },
+  { value: 'MALE' as const, label: 'Male', emoji: 'ðŸ‘¨' },
+  { value: 'FEMALE' as const, label: 'Female', emoji: 'ðŸ‘©' },
+  { value: 'OTHER' as const, label: 'Other', emoji: 'ðŸ§‘' },
 ]
 
 export function ProfileCompletionPage() {
@@ -120,13 +121,13 @@ export function ProfileCompletionPage() {
       toast.success('Profile updated!')
       setProfileCompleteSet(true)
       setCompleted(true)
-    } catch (err: any) {
+    } catch (err: unknown) {
       localStorage.setItem('profile_complete', 'true')
       if (user) {
         const fallbackUser = { ...user, name: user.name || 'RentBuddy User', fullName: user.fullName || user.name || 'RentBuddy User' }
         updateUser(fallbackUser)
       }
-      toast.error(err?.response?.data?.error || 'Failed to save profile, but your session was saved locally.')
+      toast.error(getErrorMessage(err, 'Failed to save profile, but your session was saved locally.'))
       setProfileCompleteSet(true)
       setCompleted(true)
     } finally {
@@ -148,14 +149,11 @@ export function ProfileCompletionPage() {
       <div className="relative w-full max-w-md">
         <AnimatedPage>
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-500 via-primary-400 to-accent-500 shadow-xl shadow-primary-500/25 mb-5 animate-float">
-              <svg viewBox="0 0 24 24" className="w-7 h-7" fill="none">
-                <path d="M12 3L20 9V20H14V13H10V20H4V9L12 3Z" fill="white" fillOpacity="0.93"/>
-                <circle cx="9.5" cy="8.5" r="1.5" fill="#f97316" fillOpacity="0.9"/>
-                <circle cx="14.5" cy="8.5" r="1.5" fill="#f97316" fillOpacity="0.9"/>
-                <path d="M9.5 6.5Q12 4.5 14.5 6.5" stroke="white" strokeWidth="0.8" strokeOpacity="0.5" fill="none" strokeLinecap="round"/>
-              </svg>
-            </div>
+            <img
+              src="/logo-mark.svg"
+              alt="RentBuddy logo"
+              className="inline-block w-14 h-14 rounded-2xl shadow-xl shadow-primary-500/25 mb-5 animate-float"
+            />
             <h1 className="text-3xl font-bold font-display text-surface-900 dark:text-white tracking-tight">Complete Your Profile</h1>
             <p className="mt-2 text-surface-500 dark:text-surface-400 text-sm">Help others know you better</p>
           </div>
@@ -336,27 +334,27 @@ export function ProfileCompletionPage() {
                         <div className="glass-card-sm p-5 space-y-3 text-sm">
                           <div className="flex justify-between items-center">
                             <span className="text-surface-500">Name</span>
-                            <span className="font-semibold text-surface-900 dark:text-white">{watch('fullName') || '—'}</span>
+                            <span className="font-semibold text-surface-900 dark:text-white">{watch('fullName') || 'â€”'}</span>
                           </div>
                           <div className="h-px bg-surface-200 dark:bg-surface-700" />
                           <div className="flex justify-between items-center">
                             <span className="text-surface-500">Bio</span>
-                            <span className="font-semibold text-surface-900 dark:text-white truncate max-w-[180px]">{watch('bio') || '—'}</span>
+                            <span className="font-semibold text-surface-900 dark:text-white truncate max-w-[180px]">{watch('bio') || 'â€”'}</span>
                           </div>
                           <div className="h-px bg-surface-200 dark:bg-surface-700" />
                           <div className="flex justify-between items-center">
                             <span className="text-surface-500">City</span>
-                            <span className="font-semibold text-surface-900 dark:text-white">{watch('city') || '—'}</span>
+                            <span className="font-semibold text-surface-900 dark:text-white">{watch('city') || 'â€”'}</span>
                           </div>
                           <div className="h-px bg-surface-200 dark:bg-surface-700" />
                           <div className="flex justify-between items-center">
                             <span className="text-surface-500">Country</span>
-                            <span className="font-semibold text-surface-900 dark:text-white">{watch('country') || '—'}</span>
+                            <span className="font-semibold text-surface-900 dark:text-white">{watch('country') || 'â€”'}</span>
                           </div>
                           <div className="h-px bg-surface-200 dark:bg-surface-700" />
                           <div className="flex justify-between items-center">
                             <span className="text-surface-500">Gender</span>
-                            <span className="font-semibold text-surface-900 dark:text-white">{watch('gender') || '—'}</span>
+                            <span className="font-semibold text-surface-900 dark:text-white">{watch('gender') || 'â€”'}</span>
                           </div>
                         </div>
                       </div>

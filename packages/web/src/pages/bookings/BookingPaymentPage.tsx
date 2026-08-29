@@ -1,3 +1,4 @@
+﻿import { getErrorMessage } from '../../lib/error'
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
@@ -94,13 +95,13 @@ export function BookingPaymentPage() {
             } finally { setPaying(false) }
           },
           onError: (err) => {
-            toast.error(err?.message || 'Payment failed')
+            toast.error(getErrorMessage(err, 'Payment failed'))
             setPaying(false)
           },
         })
       }
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed. Please try again.')
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Failed. Please try again.'))
     } finally {
       setConfirming(false)
     }
@@ -140,7 +141,7 @@ export function BookingPaymentPage() {
           </p>
           {doneType === 'CASH' && (
             <div className="my-4 p-4 rounded-2xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30">
-              <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">💵 Remember: Pay cash to your partner when the service is complete.</p>
+              <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">ðŸ’µ Remember: Pay cash to your partner when the service is complete.</p>
             </div>
           )}
           <button onClick={() => navigate(`/bookings/${id}`)} className="w-full btn-primary mt-4">
@@ -183,7 +184,7 @@ export function BookingPaymentPage() {
                   <span className="text-xs text-surface-500 ml-1">{partnerRating.toFixed(1)}</span>
                 </div>
               )}
-              <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 font-medium">✓ Partner has accepted your request</p>
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 font-medium">âœ“ Partner has accepted your request</p>
             </div>
             <div className="flex items-center gap-1 text-xs text-surface-500 bg-surface-100 dark:bg-surface-800 px-2 py-1 rounded-lg">
               <Clock className="w-3 h-3" /> ~15 min
@@ -286,7 +287,7 @@ export function BookingPaymentPage() {
           )}
         </button>
         <p className="text-xs text-center text-surface-400 mt-2">
-          {selected === 'ONLINE' ? '🔒 Secured by Razorpay' : selected === 'CASH' ? '📝 Transaction will be recorded' : 'Choose online or cash to continue'}
+          {selected === 'ONLINE' ? 'ðŸ”’ Secured by Razorpay' : selected === 'CASH' ? 'ðŸ“ Transaction will be recorded' : 'Choose online or cash to continue'}
         </p>
       </AnimatedPage>
     </div>

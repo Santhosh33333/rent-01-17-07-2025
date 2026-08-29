@@ -1,6 +1,20 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from '../lib/auth';
+import type {
+  LocationData,
+  BookingStatusData,
+  EtaData,
+  SosAlert,
+  MessageData,
+  TypingData,
+  MessagesReadData,
+  MessageSentData,
+  MessageDeletedData,
+  UserActiveData,
+  NotificationData,
+  CallData,
+} from '../types/socket-events';
 
 interface UseSocketOptions {
   autoConnect?: boolean;
@@ -8,6 +22,18 @@ interface UseSocketOptions {
 }
 
 let globalSocket: Socket | null = null;
+
+/**
+ * Force-disconnect the shared socket (called on logout so the session does
+ * not stay alive after the user leaves).
+ */
+export function disconnectGlobalSocket(): void {
+  if (globalSocket) {
+    globalSocket.removeAllListeners();
+    globalSocket.disconnect();
+    globalSocket = null;
+  }
+}
 
 /**
  * Hook for real-time Socket.io communication
@@ -21,6 +47,12 @@ export function useSocket(options: UseSocketOptions = {}) {
   const isConnectingRef = useRef(false);
 
   useEffect(() => {
+    // Logout cleanup: no user -> tear down any live socket
+    if (!user && globalSocket) {
+      disconnectGlobalSocket();
+      socketRef.current = null;
+      return;
+    }
     if (!autoConnect || !token) return;
     if (isConnectingRef.current) return;
     if (globalSocket?.connected) {
@@ -32,7 +64,9 @@ export function useSocket(options: UseSocketOptions = {}) {
 
     try {
       const socket = io((import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').replace(/\/api$/, ''), {
-        auth: { token },
+        // Read the CURRENT token on every (re)connection attempt — prevents
+        // stale-token reconnect loops after an access-token refresh.
+        auth: (cb) => cb({ token: typeof window !== 'undefined' ? localStorage.getItem('token') : null }),
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionDelay: 1000,
@@ -41,22 +75,18 @@ export function useSocket(options: UseSocketOptions = {}) {
       });
 
       socket.on('connect', () => {
-        console.log('[SOCKET] Connected:', socket.id);
         if (debug) console.log('[SOCKET DEBUG] Connection established');
       });
 
       socket.on('disconnect', () => {
-        console.log('[SOCKET] Disconnected');
         if (debug) console.log('[SOCKET DEBUG] Disconnected');
       });
 
       socket.on('connect_error', (error: Error) => {
-        console.error('[SOCKET] Connection error:', error);
         if (debug) console.error('[SOCKET DEBUG] Connection error:', error);
       });
 
       socket.on('error', (error: Error) => {
-        console.error('[SOCKET] Error:', error);
         if (debug) console.error('[SOCKET DEBUG] Error:', error);
       });
 
@@ -64,7 +94,7 @@ export function useSocket(options: UseSocketOptions = {}) {
       globalSocket = socket;
       isConnectingRef.current = false;
     } catch (err) {
-      console.error('[SOCKET] Failed to connect:', err);
+      if (debug) console.error('[SOCKET DEBUG] Failed to connect:', err);
       isConnectingRef.current = false;
     }
 
@@ -79,20 +109,20 @@ export function useSocket(options: UseSocketOptions = {}) {
 
   // Emit event
   const emit = useCallback(
-    (event: string, data?: any) => {
+    (event: string, data?: unknown) => {
       const socket = getSocket();
       if (socket?.connected) {
         socket.emit(event, data);
-      } else {
-        console.warn(`[SOCKET] Cannot emit '${event}' - not connected`);
+      } else if (debug) {
+        console.warn(`[SOCKET DEBUG] Cannot emit '${event}' - not connected`);
       }
     },
-    [getSocket]
+    [getSocket, debug]
   );
 
   // Listen to event
   const on = useCallback(
-    (event: string, callback: (...args: any[]) => void): (() => void) | undefined => {
+    (event: string, callback: (...args: unknown[]) => void): (() => void) | undefined => {
       const socket = getSocket();
       if (socket) {
         socket.on(event, callback);
@@ -107,7 +137,7 @@ export function useSocket(options: UseSocketOptions = {}) {
 
   // Listen to event once
   const once = useCallback(
-    (event: string, callback: (...args: any[]) => void): void => {
+    (event: string, callback: (...args: unknown[]) => void): void => {
       const socket = getSocket();
       if (socket) {
         socket.once(event, callback);
@@ -118,7 +148,7 @@ export function useSocket(options: UseSocketOptions = {}) {
 
   // Remove event listener
   const off = useCallback(
-    (event: string, callback?: (...args: any[]) => void): void => {
+    (event: string, callback?: (...args: unknown[]) => void): void => {
       const socket = getSocket();
       if (socket) {
         socket.off(event, callback);
@@ -160,7 +190,20 @@ export function useBookingTracking(bookingId: string) {
     (latitude: number, longitude: number, heading?: number, speed?: number) => {
       emit('location_update', {
         bookingId,
-        partnerId: '', // Will be set by server
+        partnerId: '',
+        latitude,
+        longitude,
+        heading,
+        speed,
+      });
+    },
+    [bookingId, emit]
+  );
+
+  const sendUserLocation = useCallback(
+    (latitude: number, longitude: number, heading?: number, speed?: number) => {
+      emit('user_location_update', {
+        bookingId,
         latitude,
         longitude,
         heading,
@@ -181,23 +224,44 @@ export function useBookingTracking(bookingId: string) {
     emit('request_eta', bookingId);
   }, [bookingId, emit]);
 
+  const sendSOS = useCallback(
+    (message?: string, latitude?: number, longitude?: number) => {
+      emit('sos', { bookingId, message, latitude, longitude });
+    },
+    [bookingId, emit]
+  );
+
   const listenToLocationUpdates = useCallback(
-    (callback: (data: any) => void) => {
-      return on('partner_location', callback);
+    (callback: (data: LocationData) => void) => {
+      return on('partner_location', callback as (...args: unknown[]) => void);
+    },
+    [on]
+  );
+
+  const listenToUserLocationUpdates = useCallback(
+    (callback: (data: LocationData) => void) => {
+      return on('user_location', callback as (...args: unknown[]) => void);
     },
     [on]
   );
 
   const listenToStatusChanges = useCallback(
-    (callback: (data: any) => void) => {
-      return on('booking_status_changed', callback);
+    (callback: (data: BookingStatusData) => void) => {
+      return on('booking_status_changed', callback as (...args: unknown[]) => void);
     },
     [on]
   );
 
   const listenToETAUpdates = useCallback(
-    (callback: (data: any) => void) => {
-      return on('eta_update', callback);
+    (callback: (data: EtaData) => void) => {
+      return on('eta_update', callback as (...args: unknown[]) => void);
+    },
+    [on]
+  );
+
+  const listenToSOSAlerts = useCallback(
+    (callback: (data: SosAlert) => void) => {
+      return on('sos_alert', callback as (...args: unknown[]) => void);
     },
     [on]
   );
@@ -218,11 +282,15 @@ export function useBookingTracking(bookingId: string) {
     joinBooking,
     leaveBooking,
     sendLocation,
+    sendUserLocation,
     updateStatus,
     requestETA,
     listenToLocationUpdates,
+    listenToUserLocationUpdates,
     listenToStatusChanges,
     listenToETAUpdates,
+    listenToSOSAlerts,
+    sendSOS,
   };
 }
 
@@ -241,15 +309,15 @@ export function useChat(conversationId: string) {
   }, [conversationId, emit]);
 
   const sendMessage = useCallback(
-    (content: string) => {
-      emit('send_message', { conversationId, content });
+    (content: string, receiverId?: string) => {
+      emit('send_message', receiverId ? { conversationId, content, receiverId } : { conversationId, content });
     },
     [conversationId, emit]
   );
 
   const markAsRead = useCallback(
-    (messageIds: string[]) => {
-      emit('mark_read', { conversationId, messageIds });
+    (messageIds: string[], conversationIdOverride?: string) => {
+      emit('mark_read', { conversationId: conversationIdOverride || conversationId, messageIds });
     },
     [conversationId, emit]
   );
@@ -266,43 +334,57 @@ export function useChat(conversationId: string) {
   );
 
   const listenToMessages = useCallback(
-    (callback: (data: any) => void) => {
-      return on('new_message', callback);
+    (callback: (data: MessageData) => void) => {
+      return on('new_message', callback as (...args: unknown[]) => void);
     },
     [on]
   );
 
   const listenToUserTyping = useCallback(
-    (callback: (data: any) => void) => {
-      return on('user_typing', callback);
+    (callback: (data: TypingData) => void) => {
+      return on('user_typing', callback as (...args: unknown[]) => void);
     },
     [on]
   );
 
   const listenToUserStoppedTyping = useCallback(
-    (callback: (data: any) => void) => {
-      return on('user_stopped_typing', callback);
+    (callback: (data: TypingData) => void) => {
+      return on('user_stopped_typing', callback as (...args: unknown[]) => void);
     },
     [on]
   );
 
   const listenToMessagesRead = useCallback(
-    (callback: (data: any) => void) => {
-      return on('messages_read', callback);
+    (callback: (data: MessagesReadData) => void) => {
+      return on('messages_read', callback as (...args: unknown[]) => void);
+    },
+    [on]
+  );
+
+  const listenToMessageSent = useCallback(
+    (callback: (data: MessageSentData) => void) => {
+      return on('message_sent', callback as (...args: unknown[]) => void);
+    },
+    [on]
+  );
+
+  const listenToMessageDeleted = useCallback(
+    (callback: (data: MessageDeletedData) => void) => {
+      return on('message_deleted', callback as (...args: unknown[]) => void);
     },
     [on]
   );
 
   const listenToUserActive = useCallback(
-    (callback: (data: any) => void) => {
-      return on('user_active', callback);
+    (callback: (data: UserActiveData) => void) => {
+      return on('user_active', callback as (...args: unknown[]) => void);
     },
     [on]
   );
 
   const listenToUserInactive = useCallback(
-    (callback: (data: any) => void) => {
-      return on('user_inactive', callback);
+    (callback: (data: UserActiveData) => void) => {
+      return on('user_inactive', callback as (...args: unknown[]) => void);
     },
     [on]
   );
@@ -329,6 +411,8 @@ export function useChat(conversationId: string) {
     listenToUserTyping,
     listenToUserStoppedTyping,
     listenToMessagesRead,
+    listenToMessageSent,
+    listenToMessageDeleted,
     listenToUserActive,
     listenToUserInactive,
   };
@@ -349,8 +433,8 @@ export function useNotifications() {
   }, [emit]);
 
   const listenToNotifications = useCallback(
-    (callback: (data: any) => void) => {
-      return on('notification', callback);
+    (callback: (data: NotificationData) => void) => {
+      return on('notification', callback as (...args: unknown[]) => void);
     },
     [on]
   );
@@ -405,29 +489,29 @@ export function useCalls() {
   );
 
   const listenToIncomingCall = useCallback(
-    (callback: (data: any) => void) => {
-      return on('incoming_call', callback);
+    (callback: (data: CallData) => void) => {
+      return on('incoming_call', callback as (...args: unknown[]) => void);
     },
     [on]
   );
 
   const listenToCallAccepted = useCallback(
-    (callback: (data: any) => void) => {
-      return on('call_accepted', callback);
+    (callback: (data: CallData) => void) => {
+      return on('call_accepted', callback as (...args: unknown[]) => void);
     },
     [on]
   );
 
   const listenToCallRejected = useCallback(
-    (callback: (data: any) => void) => {
-      return on('call_rejected', callback);
+    (callback: (data: CallData) => void) => {
+      return on('call_rejected', callback as (...args: unknown[]) => void);
     },
     [on]
   );
 
   const listenToCallEnded = useCallback(
-    (callback: (data: any) => void) => {
-      return on('call_ended', callback);
+    (callback: (data: CallData) => void) => {
+      return on('call_ended', callback as (...args: unknown[]) => void);
     },
     [on]
   );

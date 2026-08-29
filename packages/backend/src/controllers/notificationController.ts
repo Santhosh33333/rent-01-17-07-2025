@@ -1,15 +1,15 @@
-import { Request, Response } from 'express'
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
+import { Response } from 'express'
+import { prisma } from '../config/database'
+import { sendPushNotification } from '../services/notificationService'
+import { AuthedRequest } from '../middleware/authTypes'
 
 /**
  * Get user notifications with pagination
  * GET /notifications?page=1&limit=20&read=false
  */
-export async function getNotifications(req: Request, res: Response) {
+export async function getNotifications(req: AuthedRequest, res: Response) {
   try {
-    const userId = (req as any).userId || (req as any).user?.id
+    const userId = req.user!.userId
     if (!userId) {
       return res.status(401).json({ success: false, message: 'Unauthorized' })
     }
@@ -65,9 +65,9 @@ export async function getNotifications(req: Request, res: Response) {
  * Mark notification as read
  * POST /notifications/:id/read
  */
-export async function markAsRead(req: Request, res: Response) {
+export async function markAsRead(req: AuthedRequest, res: Response) {
   try {
-    const userId = (req as any).userId || (req as any).user?.id
+    const userId = req.user!.userId
     if (!userId) {
       return res.status(401).json({ success: false, message: 'Unauthorized' })
     }
@@ -102,9 +102,9 @@ export async function markAsRead(req: Request, res: Response) {
  * Mark all notifications as read
  * POST /notifications/mark-all-read
  */
-export async function markAllAsRead(req: Request, res: Response) {
+export async function markAllAsRead(req: AuthedRequest, res: Response) {
   try {
-    const userId = (req as any).userId || (req as any).user?.id
+    const userId = req.user!.userId
     if (!userId) {
       return res.status(401).json({ success: false, message: 'Unauthorized' })
     }
@@ -132,9 +132,9 @@ export async function markAllAsRead(req: Request, res: Response) {
  * Delete a notification
  * DELETE /notifications/:id
  */
-export async function deleteNotification(req: Request, res: Response) {
+export async function deleteNotification(req: AuthedRequest, res: Response) {
   try {
-    const userId = (req as any).userId || (req as any).user?.id
+    const userId = req.user!.userId
     if (!userId) {
       return res.status(401).json({ success: false, message: 'Unauthorized' })
     }
@@ -166,9 +166,9 @@ export async function deleteNotification(req: Request, res: Response) {
  * Clear all read notifications
  * DELETE /notifications/clear-read
  */
-export async function clearReadNotifications(req: Request, res: Response) {
+export async function clearReadNotifications(req: AuthedRequest, res: Response) {
   try {
-    const userId = (req as any).userId || (req as any).user?.id
+    const userId = req.user!.userId
     if (!userId) {
       return res.status(401).json({ success: false, message: 'Unauthorized' })
     }
@@ -258,6 +258,8 @@ export async function notifyBookingStatusChange(
 
   const msg = messages[status]
   if (!msg) return
+
+  void sendPushNotification(userId, msg.title, msg.body, { bookingId, status })
 
   return createNotification(
     userId,

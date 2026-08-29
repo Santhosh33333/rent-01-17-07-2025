@@ -1,7 +1,9 @@
+﻿import { getErrorMessage } from '../../lib/error'
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, FileDown } from 'lucide-react'
 import { adminApi } from '../../lib/api'
+import { exportTableToPdf } from '../../lib/pdfExport'
 
 interface AuditLog {
   id: string
@@ -26,10 +28,11 @@ export function AdminAuditLogsPage() {
     try {
       const res = await adminApi.getAuditLogs({ page })
       const d = res.data?.data || res.data
-      setLogs(Array.isArray(d?.logs) ? d.logs : Array.isArray(d) ? d : [])
-      setTotalPages(d?.totalPages || 1)
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to load audit logs')
+      setLogs(Array.isArray(d?.items) ? d.items : Array.isArray(d?.logs) ? d.logs : Array.isArray(d) ? d : [])
+      const total = Number(d?.total) || 0
+      setTotalPages(Math.max(1, Math.ceil(total / 50)))
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to load audit logs'))
     } finally {
       setLoading(false)
     }
@@ -62,6 +65,28 @@ export function AdminAuditLogsPage() {
             <h1 className="text-2xl font-bold text-white">Audit Logs</h1>
             <p className="text-gray-400 text-sm mt-1">System activity logs</p>
           </div>
+          <button
+            onClick={() =>
+              exportTableToPdf({
+                title: 'Audit Logs',
+                subtitle: `Page ${page} of ${totalPages}`,
+                columns: ['Time', 'Actor ID', 'Action', 'Entity', 'Details'],
+                rows: logs.map((l) => [
+                  l.createdAt ? new Date(l.createdAt).toLocaleString('en-IN') : '-',
+                  l.actorId || '-',
+                  l.action || '-',
+                  `${l.entityType || '-'}:${l.entityId || '-'}`,
+                  l.details || '-',
+                ]),
+                fileName: `rentbuddy-audit-logs-${new Date().toISOString().slice(0, 10)}`,
+                landscape: true,
+              })
+            }
+            disabled={logs.length === 0}
+            className="ml-auto inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-gray-300 hover:text-white text-sm transition"
+          >
+            <FileDown className="w-4 h-4" /> PDF
+          </button>
         </div>
 
         {error && (

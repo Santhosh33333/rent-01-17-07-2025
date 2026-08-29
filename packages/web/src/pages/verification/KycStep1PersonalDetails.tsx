@@ -1,3 +1,4 @@
+﻿import { getErrorMessage } from '../../lib/error'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, User } from 'lucide-react'
@@ -36,8 +37,8 @@ export function KycStep1PersonalDetails() {
       await api.post('/verification/personal-details', formData)
       toast.success('Personal details saved')
       navigate('/verification/step2')
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to save personal details')
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Failed to save personal details'))
     } finally {
       setLoading(false)
     }
@@ -199,10 +200,10 @@ export function KycStep1PersonalDetails() {
         <GlassCard variant="elevated" padding="lg" className="bg-surface-50 dark:bg-surface-800/50">
           <h3 className="font-bold text-surface-900 dark:text-white mb-3">Need help?</h3>
           <ul className="space-y-2 text-sm text-surface-600 dark:text-surface-400">
-            <li>• Information must match your government-issued ID</li>
-            <li>• Date of birth should be in YYYY-MM-DD format</li>
-            <li>• Address will be used for verification documents</li>
-            <li>• You can update this information later if needed</li>
+            <li>â€¢ Information must match your government-issued ID</li>
+            <li>â€¢ Date of birth should be in YYYY-MM-DD format</li>
+            <li>â€¢ Address will be used for verification documents</li>
+            <li>â€¢ You can update this information later if needed</li>
           </ul>
         </GlassCard>
       </AnimatedPage>

@@ -9,12 +9,12 @@ import { GlassCard } from '../../components/GlassCard'
 import { SkeletonLoader } from '../../components/SkeletonLoader'
 
 interface ActiveJob {
-  id: number
+  id: string
   type: string
-  pickupLocation: string
-  dropLocation: string
-  scheduledTime: string
-  price: number
+  startLocation: string
+  endLocation: string
+  startTime: string
+  fare: number
   status: string
 }
 
@@ -38,9 +38,9 @@ export function PartnerNavigationPage() {
         ])
         if (jobRes.status === 'fulfilled') {
           const raw = jobRes.value.data?.data || jobRes.value.data || []
-          const arr: ActiveJob[] = Array.isArray(raw) ? raw : []
-          const active = arr.find((j: ActiveJob) => j.status === 'accepted' || j.status === 'in_progress')
-          if (active) setActiveJob(active)
+          const arr: ActiveJob[] = Array.isArray(raw) ? raw : (raw.items || [])
+          const active = arr.find((j) => j.status === 'ACCEPTED' || j.status === 'IN_PROGRESS')
+          if (active) setActiveJob({ ...active, fare: Number(active.fare ?? 0) })
         }
         if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(
@@ -163,7 +163,7 @@ export function PartnerNavigationPage() {
                 <MapPin className="w-4 h-4 text-emerald-500" />
                 <div>
                   <p className="text-xs text-surface-500">Pickup</p>
-                  <p className="text-sm font-medium text-surface-900 dark:text-white">{activeJob.pickupLocation}</p>
+                  <p className="text-sm font-medium text-surface-900 dark:text-white">{activeJob.startLocation}</p>
                 </div>
               </div>
               <div className="flex justify-center">
@@ -173,12 +173,12 @@ export function PartnerNavigationPage() {
                 <MapPin className="w-4 h-4 text-red-500" />
                 <div>
                   <p className="text-xs text-surface-500">Drop</p>
-                  <p className="text-sm font-medium text-surface-900 dark:text-white">{activeJob.dropLocation}</p>
+                  <p className="text-sm font-medium text-surface-900 dark:text-white">{activeJob.endLocation}</p>
                 </div>
               </div>
               <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200/50 dark:border-emerald-800/30">
                 <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Estimated Earning</span>
-                <span className="text-lg font-bold text-emerald-700 dark:text-emerald-400">₹{activeJob.price}</span>
+                <span className="text-lg font-bold text-emerald-700 dark:text-emerald-400">₹{activeJob.fare}</span>
               </div>
             </div>
           ) : (

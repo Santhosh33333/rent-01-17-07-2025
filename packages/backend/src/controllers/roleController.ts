@@ -77,7 +77,19 @@ export async function switchRole(req: AuthedRequest, res: Response): Promise<voi
     }
 
     const adminRoles = ["ADMIN", "SUPER_ADMIN", "MODERATOR", "SUPPORT", "FINANCE"];
-    if (adminRoles.includes(user.role || "")) allowedRoles.push(user.role!);
+    const isAdminTier = adminRoles.includes(user.role || "");
+    if (isAdminTier) allowedRoles.push(user.role!);
+
+    // Admin-tier accounts switching into the PARTNER view get a provisioned
+    // APPROVED partner profile so they can inspect the full partner
+    // experience without going through the public application flow.
+    if (isAdminTier && role === "PARTNER" && (!partner || partner.status !== "APPROVED")) {
+      await prisma.partner.upsert({
+        where: { userId: req.user!.userId },
+        update: { status: "APPROVED" },
+        create: { userId: req.user!.userId, status: "APPROVED", providesWalking: true, providesCarry: true },
+      });
+    }
 
     if (!allowedRoles.includes(role)) {
       sendError(res, "Role not approved for this account.", 403, "FORBIDDEN");

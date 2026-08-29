@@ -2,7 +2,30 @@ import { Response } from "express";
 import { prisma } from "../config/database";
 import { sendSuccess, sendError } from "../utils/response";
 import { AuthedRequest } from "../middleware/authTypes";
-import { getPartnerEarnings } from "../services/pricingEngine";
+import { getPartnerEarnings, getConfig } from "../services/pricingEngine";
+
+// Serializes concurrent money-affecting operations per user so the app-level
+// "one open withdrawal at a time" rule cannot be raced by two parallel requests
+// on a single server instance. (For multi-instance deployments, replace with a
+// distributed lock such as Redis.)
+function createMutex() {
+  let lock: Promise<unknown> = Promise.resolve();
+  return (fn: () => Promise<unknown>) => {
+    const result = lock.then(fn, fn);
+    lock = result.catch(() => {});
+    return result;
+  };
+}
+const userMutexes = new Map<string, ReturnType<typeof createMutex>>();
+function withUserLock<T>(userId: string, fn: () => Promise<T>): Promise<T> {
+  let m = userMutexes.get(userId);
+  if (!m) {
+    m = createMutex();
+    userMutexes.set(userId, m);
+  }
+  return m(fn as () => Promise<unknown>) as Promise<T>;
+}
+
 
 // ============================================================================
 // GET WALLET
@@ -31,28 +54,28 @@ export async function getWallet(req: AuthedRequest, res: Response): Promise<void
 
 export async function topupWallet(req: AuthedRequest, res: Response): Promise<void> {
   try {
-    const { amount, paymentMethodId } = req.body;
+    const { amount } = req.body;
+    const maxTopup = await getConfig("MAX_TOPUP_AMOUNT", 100000);
 
     if (!amount || amount <= 0) {
       sendError(res, "Invalid topup amount.", 400, "VALIDATION_ERROR");
       return;
     }
 
-    if (amount > 100000) {
-      sendError(res, "Maximum topup amount is 100,000.", 400, "AMOUNT_EXCEEDS_LIMIT");
+    if (amount > maxTopup) {
+      sendError(res, `Maximum topup amount is ${maxTopup.toLocaleString("en-IN")}.`, 400, "AMOUNT_EXCEEDS_LIMIT");
       return;
     }
 
     // TODO: Integrate with Razorpay payment gateway
     // For now, create pending transaction pending payment
 
-    const wallet = await prisma.wallet.findUnique({
+    let wallet = await prisma.wallet.findUnique({
       where: { userId: req.user!.userId },
     });
 
     if (!wallet) {
-      sendError(res, "Wallet not found.", 404, "WALLET_NOT_FOUND");
-      return;
+      wallet = await prisma.wallet.create({ data: { userId: req.user!.userId } });
     }
 
     const transaction = await prisma.transaction.create({
@@ -66,6 +89,12 @@ export async function topupWallet(req: AuthedRequest, res: Response): Promise<vo
       },
     });
 
+    // Real top-up funds are credited only after a genuine Razorpay capture via
+    // POST /payments/verify — never automatically. This endpoint just records the
+    // request; no balance is changed here.
+    const finalTx = transaction;
+    const balance = wallet.balance;
+
     await prisma.auditLog.create({
       data: {
         actorId: req.user!.userId,
@@ -73,13 +102,35 @@ export async function topupWallet(req: AuthedRequest, res: Response): Promise<vo
         action: "WALLET_TOPUP",
         entityType: "Wallet",
         entityId: wallet.id,
-        metadata: JSON.stringify({ amount }),
+        metadata: JSON.stringify({ amount, autoCredited: false }),
       },
     });
 
-    sendSuccess(res, transaction, "Topup request created.", 201);
+    sendSuccess(
+      res,
+      { ...finalTx, walletBalance: balance },
+      "Topup request created. Complete the Razorpay payment to add funds.",
+      201
+    );
   } catch (err: any) {
     sendError(res, "Failed to topup wallet.", 500, "INTERNAL_ERROR");
+  }
+}
+
+// ============================================================================
+// WALLET CONFIG (rules shown to clients)
+// ============================================================================
+
+export async function getWalletConfig(_req: AuthedRequest, res: Response): Promise<void> {
+  try {
+    const [minWithdrawal, maxWithdrawal, maxTopup] = await Promise.all([
+      getConfig("MIN_WITHDRAWAL_AMOUNT", 100),
+      getConfig("MAX_WITHDRAWAL_AMOUNT", 500000),
+      getConfig("MAX_TOPUP_AMOUNT", 100000),
+    ]);
+    sendSuccess(res, { minWithdrawal, maxWithdrawal, maxTopup });
+  } catch (err: any) {
+    sendError(res, "Failed to retrieve wallet config.", 500, "INTERNAL_ERROR");
   }
 }
 
@@ -135,7 +186,11 @@ export async function getWithdrawalHistory(req: AuthedRequest, res: Response): P
       prisma.withdrawalRequest.count({ where }),
     ]);
 
-    sendSuccess(res, { items, page, limit, total });
+    const parsed = items.map((w: any) => {
+      try { return { ...w, accountDetail: JSON.parse(w.accountDetail) }; } catch { return w; }
+    });
+
+    sendSuccess(res, { items: parsed, page, limit, total });
   } catch (err: any) {
     sendError(res, "Failed to retrieve withdrawal history.", 500, "INTERNAL_ERROR");
   }
@@ -155,13 +210,34 @@ export async function requestWithdrawal(req: AuthedRequest, res: Response): Prom
       return;
     }
 
-    if (!amount || amount <= 0 || amount < 100) {
-      sendError(res, "Minimum withdrawal amount is 100.", 400, "VALIDATION_ERROR");
+    // A payout destination is mandatory and must be well-formed.
+    if (method === "BANK_TRANSFER") {
+      const ad = accountDetail as { accountNumber?: string; ifsc?: string } | undefined;
+      if (!ad?.accountNumber || !ad?.ifsc) {
+        sendError(res, "Bank account number and IFSC are required.", 400, "INVALID_ACCOUNT");
+        return;
+      }
+    } else if (method === "UPI") {
+      const ad = accountDetail as { upiId?: string } | undefined;
+      if (!ad?.upiId || !/^[\w.\-]+@[a-zA-Z]{2,}$/.test(ad.upiId)) {
+        sendError(res, "A valid UPI ID is required.", 400, "INVALID_ACCOUNT");
+        return;
+      }
+    }
+
+    const [minWithdrawal, maxWithdrawal, withdrawalFee] = await Promise.all([
+      getConfig("MIN_WITHDRAWAL_AMOUNT", 100),
+      getConfig("MAX_WITHDRAWAL_AMOUNT", 500000),
+      getConfig("WITHDRAWAL_FEE_FLAT", 0),
+    ]);
+
+    if (!amount || amount <= 0 || amount < minWithdrawal) {
+      sendError(res, `Minimum withdrawal amount is ${minWithdrawal.toLocaleString("en-IN")}.`, 400, "VALIDATION_ERROR");
       return;
     }
 
-    if (amount > 500000) {
-      sendError(res, "Maximum withdrawal amount is 500,000.", 400, "AMOUNT_EXCEEDS_LIMIT");
+    if (amount > maxWithdrawal) {
+      sendError(res, `Maximum withdrawal amount is ${maxWithdrawal.toLocaleString("en-IN")}.`, 400, "AMOUNT_EXCEEDS_LIMIT");
       return;
     }
 
@@ -174,35 +250,72 @@ export async function requestWithdrawal(req: AuthedRequest, res: Response): Prom
       return;
     }
 
+    // Fee must not exceed the payout itself.
+    if (withdrawalFee >= amount) {
+      sendError(res, "Amount must exceed the withdrawal fee.", 400, "VALIDATION_ERROR");
+      return;
+    }
+
     if (amount > wallet.balance) {
       sendError(res, "Insufficient wallet balance.", 400, "INSUFFICIENT_FUNDS");
       return;
     }
 
-    const withdrawal = await prisma.$transaction(async (tx) => {
-      const lockedWallet = await tx.wallet.findUnique({ where: { id: wallet.id } });
+    const withdrawal = await withUserLock(req.user!.userId, () =>
+      prisma.$transaction(async (tx) => {
+        const lockedWallet = await tx.wallet.findUnique({
+          where: { id: wallet.id },
+        });
 
-      if (!lockedWallet || amount > lockedWallet.balance) {
-        throw new Error("INSUFFICIENT_FUNDS");
-      }
+        if (!lockedWallet || amount > lockedWallet.balance) {
+          throw new Error("INSUFFICIENT_FUNDS");
+        }
 
-      // Deduct from wallet balance immediately
+        // Anti-duplicate (Part 28): re-checked inside the serialized transaction so
+        // two parallel requests cannot both pass the pre-check and create two payouts.
+        const openWithdrawal = await tx.withdrawalRequest.findFirst({
+          where: { userId: req.user!.userId, status: { in: ["PENDING", "PROCESSING"] } },
+          select: { id: true },
+        });
+        if (openWithdrawal) {
+          const e: any = new Error("Duplicate withdrawal");
+          e.code = "DUPLICATE_WITHDRAWAL";
+          throw e;
+        }
+
+        // Hold funds immediately (single debit for the whole lifecycle)
       await tx.wallet.update({
         where: { id: wallet.id },
         data: { balance: { decrement: amount } },
       });
 
-      return tx.withdrawalRequest.create({
+      const created = await tx.withdrawalRequest.create({
         data: {
           userId: req.user!.userId,
           walletId: wallet.id,
           amount,
           method,
-          accountDetail,
+          accountDetail: JSON.stringify(accountDetail),
           status: "PENDING",
         },
       });
-    });
+
+      // Paused ledger row: PENDING until settled (approved) or released (rejected/cancelled)
+      await tx.transaction.create({
+        data: {
+          userId: req.user!.userId,
+          walletId: wallet.id,
+          type: "WITHDRAWAL",
+          status: "PENDING",
+          amount,
+          description: "Withdrawal held pending review",
+          referenceId: created.id,
+        },
+      });
+
+      return created;
+    }),
+    );
 
     await prisma.auditLog.create({
       data: {
@@ -211,13 +324,17 @@ export async function requestWithdrawal(req: AuthedRequest, res: Response): Prom
         action: "WITHDRAWAL_REQUEST",
         entityType: "WithdrawalRequest",
         entityId: withdrawal.id,
-        metadata: JSON.stringify({ amount, method }),
+        metadata: JSON.stringify({ amount, method, withdrawalFee }),
       },
     });
 
-    sendSuccess(res, withdrawal, "Withdrawal request submitted.", 201);
+    let out: any = withdrawal;
+    try { out = { ...withdrawal, accountDetail: JSON.parse((withdrawal as any).accountDetail) }; } catch { /* keep as-is */ }
+    sendSuccess(res, out, "Withdrawal request submitted.", 201);
   } catch (err: any) {
-    if (err?.message === "INSUFFICIENT_FUNDS") {
+    if (err?.code === "DUPLICATE_WITHDRAWAL") {
+      sendError(res, "You already have a withdrawal being processed.", 409, "DUPLICATE_WITHDRAWAL");
+    } else if (err?.message === "INSUFFICIENT_FUNDS") {
       sendError(res, "Insufficient wallet balance.", 400, "INSUFFICIENT_FUNDS");
     } else {
       sendError(res, "Failed to request withdrawal.", 500, "INTERNAL_ERROR");
@@ -245,16 +362,30 @@ export async function cancelWithdrawal(req: AuthedRequest, res: Response): Promi
       return;
     }
 
-    await prisma.$transaction([
-      prisma.withdrawalRequest.update({
-        where: { id },
+    await prisma.$transaction(async (tx) => {
+      // Conditional claim: only one concurrent cancel can flip PENDING -> CANCELLED
+      const claimed = await tx.withdrawalRequest.updateMany({
+        where: { id, userId: req.user!.userId, status: "PENDING" },
         data: { status: "CANCELLED", rejectionReason: "Cancelled by user" },
-      }),
-      prisma.wallet.update({
+      });
+
+      if (claimed.count !== 1) {
+        throw new Error("WITHDRAWAL_NOT_PENDING");
+      }
+
+      // Release held funds exactly once
+      await tx.wallet.update({
         where: { id: withdrawal.walletId },
         data: { balance: { increment: withdrawal.amount } },
-      }),
-      prisma.auditLog.create({
+      });
+
+      // Close the paired hold ledger row
+      await tx.transaction.updateMany({
+        where: { referenceId: id, type: "WITHDRAWAL", status: "PENDING" },
+        data: { status: "FAILED", description: "Withdrawal cancelled by user; hold released" },
+      });
+
+      await tx.auditLog.create({
         data: {
           actorId: req.user!.userId,
           actorType: "USER",
@@ -262,12 +393,16 @@ export async function cancelWithdrawal(req: AuthedRequest, res: Response): Promi
           entityType: "WithdrawalRequest",
           entityId: id,
         },
-      }),
-    ]);
+      });
+    });
 
     sendSuccess(res, undefined, "Withdrawal cancelled.");
   } catch (err: any) {
-    sendError(res, "Failed to cancel withdrawal.", 500, "INTERNAL_ERROR");
+    if (err?.message === "WITHDRAWAL_NOT_PENDING") {
+      sendError(res, "Only pending withdrawals can be cancelled.", 400, "INVALID_STATUS");
+    } else {
+      sendError(res, "Failed to cancel withdrawal.", 500, "INTERNAL_ERROR");
+    }
   }
 }
 

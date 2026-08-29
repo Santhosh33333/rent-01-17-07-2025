@@ -41,12 +41,16 @@ export function DashboardPage() {
         const eventsData = eventsRes.status === 'fulfilled' ? (eventsRes.value.data?.data || eventsRes.value.data || null) : null
         const walkingData = walkingRes.status === 'fulfilled' ? (walkingRes.value.data?.data || walkingRes.value.data || null) : null
 
+        const communitiesItems = Array.isArray(communitiesData) ? communitiesData : (Array.isArray(communitiesData?.items) ? communitiesData.items : null)
+        const eventsItems = Array.isArray(eventsData) ? eventsData : (Array.isArray(eventsData?.items) ? eventsData.items : null)
+        const walkingItems = Array.isArray(walkingData) ? walkingData : (Array.isArray(walkingData?.items) ? walkingData.items : null)
+
         setStats({
           wallet: statsData?.wallet ?? null,
           friends: statsData?.friends ?? 0,
-          communities: Array.isArray(communitiesData) ? communitiesData.length : (communitiesData?.count ?? 0),
-          events: Array.isArray(eventsData) ? eventsData.length : (eventsData?.count ?? 0),
-          bookings: Array.isArray(walkingData) ? walkingData.length : (walkingData?.count ?? 0),
+          communities: communitiesItems ? communitiesItems.length : (communitiesData?.count ?? 0),
+          events: eventsItems ? eventsItems.length : (eventsData?.count ?? 0),
+          bookings: walkingItems ? walkingItems.length : (walkingData?.count ?? 0),
           unreadMessages: statsData?.unreadMessages ?? 0,
         })
       } catch {

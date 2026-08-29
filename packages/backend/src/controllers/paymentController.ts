@@ -1,5 +1,6 @@
 import { Response, Request } from "express"
 import { prisma } from "../config/database"
+import { env } from "../config/env"
 import { sendSuccess, sendError } from "../utils/response"
 import { AuthedRequest } from "../middleware/authTypes"
 import * as razorpayService from "../services/razorpayService"
@@ -18,7 +19,14 @@ export async function createOrder(req: AuthedRequest, res: Response): Promise<vo
 
     const userId = req.user!.userId
 
-    // Create Razorpay order
+    if (env.RAZORPAY_KEY_ID.includes("placeholder")) {
+      sendError(res, "Payments are not configured on this server.", 503, "PAYMENT_NOT_CONFIGURED");
+      return;
+    }
+
+    // Real Razorpay order only — no demo/test fallback. If the gateway is
+    // unreachable the request fails with a real error so the client can surface
+    // it honestly to the user.
     const order = await razorpayService.createOrder(
       amount,
       "INR",
@@ -70,14 +78,19 @@ export async function verifyPayment(req: AuthedRequest, res: Response): Promise<
   try {
     const { razorpayOrderId, razorpayPaymentId, razorpaySignature, amount } = req.body
 
+    const userId = req.user!.userId
+
+    if (env.RAZORPAY_KEY_ID.includes("placeholder")) {
+      sendError(res, "Payments are not configured on this server.", 503, "PAYMENT_NOT_CONFIGURED");
+      return;
+    }
+
     if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
       sendError(res, "Missing payment verification details.", 400, "MISSING_PARAMS")
       return
     }
 
-    const userId = req.user!.userId
-
-    // Verify signature
+    // Verify the Razorpay signature (cryptographic proof the payment is genuine).
     const isValid = razorpayService.verifyPayment(razorpayOrderId, razorpayPaymentId, razorpaySignature)
     if (!isValid) {
       await prisma.auditLog.create({
@@ -94,14 +107,20 @@ export async function verifyPayment(req: AuthedRequest, res: Response): Promise<
       return
     }
 
-    // Fetch payment details from Razorpay to verify amount
-    const paymentDetails = await razorpayService.fetchPayment(razorpayPaymentId)
-    if (!paymentDetails || paymentDetails.status !== "captured") {
-      sendError(res, "Payment not captured.", 400, "PAYMENT_NOT_CAPTURED")
-      return
+    // Fetch payment details from Razorpay to verify amount/capture status.
+    // The HMAC above is already cryptographic proof the payment is genuine;
+    // if the details API hiccups, fall back to the signed order data rather
+    // than failing a legitimate payment.
+    let paymentDetails: { status: string; amount: number | string } | null = null
+    try {
+      paymentDetails = await razorpayService.fetchPayment(razorpayPaymentId)
+      if (!paymentDetails || paymentDetails.status !== "captured") {
+        sendError(res, "Payment not captured.", 400, "PAYMENT_NOT_CAPTURED")
+        return
+      }
+    } catch {
+      paymentDetails = null // trust signature + stored order amount below
     }
-
-    const amountInRupees = Number(paymentDetails.amount) / 100 // Convert from paise
 
     // Find wallet
     const wallet = await prisma.wallet.findUnique({ where: { userId } })
@@ -110,13 +129,65 @@ export async function verifyPayment(req: AuthedRequest, res: Response): Promise<
       return
     }
 
-    // Update in transaction
-    const [updatedWallet, transaction, paymentOrder] = await prisma.$transaction([
-      prisma.wallet.update({
+    const paymentOrder = await prisma.paymentOrder.findUnique({
+      where: { razorpayOrderId },
+    })
+
+    if (!paymentOrder || paymentOrder.userId !== userId) {
+      sendError(res, "Payment order not found.", 404, "ORDER_NOT_FOUND")
+      return
+    }
+
+    if (amount !== undefined && Number(amount) !== Number(paymentOrder.amount)) {
+      sendError(res, "Amount mismatch.", 400, "AMOUNT_MISMATCH")
+      return
+    }
+
+    if (paymentDetails && Number(paymentDetails.amount) / 100 !== Number(paymentOrder.amount)) {
+      sendError(res, "Captured amount does not match order.", 400, "AMOUNT_MISMATCH")
+      return
+    }
+
+    // When Razorpay details are unavailable, the signed PaymentOrder amount is authoritative.
+    const amountInRupees = paymentDetails ? Number(paymentDetails.amount) / 100 : Number(paymentOrder.amount)
+
+    if (paymentOrder.type !== "TOPUP") {
+      sendError(res, "Invalid order type.", 400, "INVALID_ORDER_TYPE")
+      return
+    }
+
+    if (paymentOrder.status === "COMPLETED") {
+      // Idempotent replay: order already credited — do NOT credit again
+      sendSuccess(
+        res,
+        { balance: wallet.balance, paymentId: razorpayPaymentId, transactionId: null },
+        "Payment already verified."
+      )
+      return
+    }
+
+    // Update in transaction — the status latch makes concurrent/replay calls safe:
+    // only ONE caller can flip CREATED/AUTHORIZED -> COMPLETED and win the credit.
+    const result = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.paymentOrder.updateMany({
+        where: { razorpayOrderId, userId, status: { in: ["CREATED", "AUTHORIZED"] } },
+        data: {
+          status: "COMPLETED",
+          razorpayPaymentId,
+          completedAt: new Date(),
+        },
+      })
+
+      if (claimed.count !== 1) {
+        return null
+      }
+
+      const updatedWallet = await tx.wallet.update({
         where: { userId },
         data: { balance: { increment: amountInRupees } },
-      }),
-      prisma.transaction.create({
+      })
+
+      const transaction = await tx.transaction.create({
         data: {
           walletId: wallet.id,
           userId,
@@ -126,16 +197,23 @@ export async function verifyPayment(req: AuthedRequest, res: Response): Promise<
           description: `Wallet top-up via Razorpay`,
           referenceId: razorpayPaymentId,
         },
-      }),
-      prisma.paymentOrder.updateMany({
-        where: { razorpayOrderId },
-        data: {
-          status: "COMPLETED",
-          razorpayPaymentId,
-          completedAt: new Date(),
-        },
-      }),
-    ])
+      })
+
+      return { updatedWallet, transaction }
+    })
+
+    if (!result) {
+      // Lost the race (webhook or parallel call already completed this order)
+      const freshWallet = await prisma.wallet.findUnique({ where: { userId } })
+      sendSuccess(
+        res,
+        { balance: freshWallet?.balance ?? wallet.balance, paymentId: razorpayPaymentId, transactionId: null },
+        "Payment already verified."
+      )
+      return
+    }
+
+    const { updatedWallet, transaction } = result
 
     // Log action
     await prisma.auditLog.create({
@@ -190,20 +268,22 @@ export async function webhookPayment(req: Request, res: Response): Promise<void>
     // Verify webhook signature
     const isValid = razorpayService.verifyWebhookSignature(payload, signature)
     if (!isValid) {
-      console.warn("Invalid webhook signature")
-      res.status(400).json({ error: "Invalid signature" })
+      console.warn("Invalid webhook signature — ignoring")
+      // Return 200 to prevent infinite Razorpay retry loops.
+      // The payload is not genuine, so we safely acknowledge and discard.
+      res.status(200).json({ received: false, reason: "Invalid signature" })
       return
     }
 
     const event = req.body
 
     if (event.event === "payment.authorized") {
-      // Payment authorized - capture it
+      // Payment authorized - record it without clobbering terminal states
       const paymentId = event.payload.payment.entity.id
       const orderId = event.payload.payment.entity.order_id
 
-      await prisma.paymentOrder.update({
-        where: { razorpayOrderId: orderId },
+      await prisma.paymentOrder.updateMany({
+        where: { razorpayOrderId: orderId, status: "CREATED" },
         data: {
           status: "AUTHORIZED",
           razorpayPaymentId: paymentId,
@@ -215,46 +295,58 @@ export async function webhookPayment(req: Request, res: Response): Promise<void>
       const orderId = event.payload.payment.entity.order_id
       const amount = Number(event.payload.payment.entity.amount) / 100
 
-      const paymentOrder = await prisma.paymentOrder.findUnique({
-        where: { razorpayOrderId: orderId },
-      })
+      // Status latch INSIDE the tx: only one of (webhook, client verify) can win
+      await prisma.$transaction(async (tx) => {
+        const claimed = await tx.paymentOrder.updateMany({
+          where: { razorpayOrderId: orderId, status: { in: ["CREATED", "AUTHORIZED"] } },
+          data: {
+            status: "COMPLETED",
+            razorpayPaymentId: paymentId,
+            completedAt: new Date(),
+          },
+        })
 
-      if (paymentOrder && paymentOrder.status !== "COMPLETED") {
-        // Update wallet
-        await prisma.$transaction([
-          prisma.wallet.update({
-            where: { id: paymentOrder.walletId },
-            data: { balance: { increment: amount } },
-          }),
-          prisma.transaction.create({
-            data: {
-              walletId: paymentOrder.walletId,
-              userId: paymentOrder.userId,
-              type: "CREDIT",
-              status: "COMPLETED",
-              amount,
-              description: `Wallet top-up via Razorpay webhook`,
-              referenceId: paymentId,
-            },
-          }),
-          prisma.paymentOrder.update({
-            where: { razorpayOrderId: orderId },
-            data: {
-              status: "COMPLETED",
-              razorpayPaymentId: paymentId,
-              completedAt: new Date(),
-            },
-          }),
-          prisma.notification.create({
-            data: {
-              userId: paymentOrder.userId,
-              title: "Payment Confirmed",
-              body: `₹${amount} has been added to your wallet.`,
-              data: JSON.stringify({ paymentId, amount }),
-            },
-          }),
-        ])
-      }
+        if (claimed.count !== 1) {
+          return
+        }
+
+        const paymentOrder = await tx.paymentOrder.findUnique({
+          where: { razorpayOrderId: orderId },
+        })
+
+        if (!paymentOrder || Number(paymentOrder.amount) !== amount) {
+          throw new Error("WEBHOOK_AMOUNT_MISMATCH")
+        }
+
+        await tx.wallet.update({
+          where: { id: paymentOrder.walletId },
+          data: { balance: { increment: amount } },
+        })
+
+        await tx.transaction.create({
+          data: {
+            walletId: paymentOrder.walletId,
+            userId: paymentOrder.userId,
+            type: "CREDIT",
+            status: "COMPLETED",
+            amount,
+            description: `Wallet top-up via Razorpay webhook`,
+            referenceId: paymentId,
+          },
+        })
+
+        await tx.notification.create({
+          data: {
+            userId: paymentOrder.userId,
+            title: "Payment Confirmed",
+            body: `₹${amount} has been added to your wallet.`,
+            data: JSON.stringify({ paymentId, amount }),
+          },
+        })
+      }).catch((err) => {
+        if (err?.message !== "WEBHOOK_AMOUNT_MISMATCH") throw err
+        console.error(`Webhook captured-amount mismatch for order ${orderId}`)
+      })
     } else if (event.event === "payment.failed") {
       // Payment failed
       const paymentId = event.payload.payment.entity.id
@@ -289,36 +381,43 @@ export async function webhookPayment(req: Request, res: Response): Promise<void>
       const refundId = event.payload.refund.entity.id
       const amount = Number(event.payload.refund.entity.amount) / 100
 
-      const transaction = await prisma.transaction.findFirst({
-        where: { referenceId: paymentId },
+      // Idempotency: skip if this refund was already credited
+      const existing = await prisma.transaction.findFirst({
+        where: { referenceId: refundId, type: "CREDIT" },
       })
 
-      if (transaction) {
-        await prisma.$transaction([
-          prisma.wallet.update({
-            where: { id: transaction.walletId },
-            data: { balance: { increment: amount } },
-          }),
-          prisma.transaction.create({
-            data: {
-              walletId: transaction.walletId,
-              userId: transaction.userId,
-              type: "CREDIT",
-              status: "COMPLETED",
-              amount,
-              description: `Refund for booking cancellation`,
-              referenceId: refundId,
-            },
-          }),
-          prisma.notification.create({
-            data: {
-              userId: transaction.userId,
-              title: "Refund Processed",
-              body: `₹${amount} refunded to your wallet.`,
-              data: JSON.stringify({ refundId, amount }),
-            },
-          }),
-        ])
+      if (!existing) {
+        const transaction = await prisma.transaction.findFirst({
+          where: { referenceId: paymentId, type: "CREDIT", status: "COMPLETED" },
+        })
+
+        if (transaction) {
+          await prisma.$transaction([
+            prisma.wallet.update({
+              where: { id: transaction.walletId },
+              data: { balance: { increment: amount } },
+            }),
+            prisma.transaction.create({
+              data: {
+                walletId: transaction.walletId,
+                userId: transaction.userId,
+                type: "CREDIT",
+                status: "COMPLETED",
+                amount,
+                description: `Refund for booking cancellation`,
+                referenceId: refundId,
+              },
+            }),
+            prisma.notification.create({
+              data: {
+                userId: transaction.userId,
+                title: "Refund Processed",
+                body: `₹${amount} refunded to your wallet.`,
+                data: JSON.stringify({ refundId, amount }),
+              },
+            }),
+          ])
+        }
       }
     }
 

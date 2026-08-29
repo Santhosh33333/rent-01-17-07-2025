@@ -1,3 +1,4 @@
+﻿import { getErrorMessage } from '../../lib/error'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, CreditCard, Upload } from 'lucide-react'
@@ -57,8 +58,8 @@ export function KycStep2GovId() {
 
       toast.success('Government ID uploaded successfully')
       navigate('/verification/step3')
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to upload government ID')
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Failed to upload government ID'))
     } finally {
       setLoading(false)
     }
@@ -191,11 +192,11 @@ export function KycStep2GovId() {
         <GlassCard variant="elevated" padding="lg" className="bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500">
           <h3 className="font-bold text-amber-900 dark:text-amber-300 mb-3">Tips for a clear photo:</h3>
           <ul className="space-y-2 text-sm text-amber-800 dark:text-amber-200">
-            <li>✓ Good lighting - avoid shadows and glare</li>
-            <li>✓ All corners visible - entire document in frame</li>
-            <li>✓ In focus - sharp and clear image</li>
-            <li>✓ Color - original colors, not black & white</li>
-            <li>✓ Recent - valid and not expired</li>
+            <li>âœ“ Good lighting - avoid shadows and glare</li>
+            <li>âœ“ All corners visible - entire document in frame</li>
+            <li>âœ“ In focus - sharp and clear image</li>
+            <li>âœ“ Color - original colors, not black & white</li>
+            <li>âœ“ Recent - valid and not expired</li>
           </ul>
         </GlassCard>
       </AnimatedPage>

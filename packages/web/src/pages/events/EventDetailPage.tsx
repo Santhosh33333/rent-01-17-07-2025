@@ -34,7 +34,19 @@ export function EventDetailPage() {
     const fetchEvent = async () => {
       try {
         const res = await api.get(`/events/${id}`)
-        const data = res.data?.data || res.data
+        const raw = res.data?.data || res.data
+        const data = raw ? {
+          id: raw.id,
+          name: raw.title,
+          description: raw.description ?? '',
+          date: raw.startTime,
+          location: raw.location ?? 'TBA',
+          rsvp: !!raw.isRegistered,
+          attendees: raw.attendeeCount ?? 0,
+          category: raw.category,
+          organizer: raw.organizer?.fullName,
+          maxAttendees: raw.capacity,
+        } : null
         setEvent(data)
       } catch (err) {
         setError('Failed to load event details')
@@ -50,11 +62,11 @@ export function EventDetailPage() {
     setRsvping(true)
     try {
       if (event.rsvp) {
-        await api.post(`/events/${id}/unrsvp`)
+        await api.post(`/events/${id}/cancel`)
         setEvent({ ...event, rsvp: false, attendees: event.attendees - 1 })
         toast.success('RSVP cancelled')
       } else {
-        await api.post(`/events/${id}/rsvp`)
+        await api.post(`/events/${id}/register`)
         setEvent({ ...event, rsvp: true, attendees: event.attendees + 1 })
         toast.success('RSVP confirmed!')
       }

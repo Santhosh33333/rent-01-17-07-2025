@@ -1,16 +1,19 @@
+﻿import { getErrorMessage } from '../../lib/error'
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, ChevronLeft, ChevronRight, Check, X } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Check, X, FileDown } from 'lucide-react'
 import { adminApi } from '../../lib/api'
+import { exportTableToPdf } from '../../lib/pdfExport'
 
 interface Withdrawal {
   id: string
   userId: string
   userName: string
-  amount: number
+  userEmail?: string
+  amount: number | string
   status: string
-  upiId?: string
-  bankAccount?: string
+  method?: string
+  accountDetail?: string
   createdAt: string
 }
 
@@ -28,13 +31,25 @@ export function AdminWithdrawalsPage() {
     setError('')
     try {
       const params: any = { page }
-      if (statusFilter) params.status = statusFilter
+      if (statusFilter && statusFilter !== 'ALL') params.status = statusFilter
       const res = await adminApi.getWithdrawals(params)
       const d = res.data?.data || res.data
-      setWithdrawals(Array.isArray(d?.withdrawals) ? d.withdrawals : Array.isArray(d) ? d : [])
-      setTotalPages(d?.totalPages || 1)
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to load withdrawals')
+      const raw = Array.isArray(d?.items) ? d.items : Array.isArray(d?.withdrawals) ? d.withdrawals : Array.isArray(d) ? d : []
+      setWithdrawals(raw.map((w: any) => ({
+        id: w.id,
+        userId: w.userId,
+        userName: w.user?.fullName || w.userName || 'Unknown',
+        userEmail: w.user?.email || '',
+        amount: w.amount,
+        status: w.status,
+        method: w.method || '',
+        accountDetail: w.accountDetail || w.upiId || w.bankAccount || '',
+        createdAt: w.createdAt,
+      })))
+      const total = Number(d?.total) || 0
+      setTotalPages(Math.max(1, Math.ceil(total / 20)))
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to load withdrawals'))
     } finally {
       setLoading(false)
     }
@@ -49,8 +64,8 @@ export function AdminWithdrawalsPage() {
     try {
       await adminApi.approveWithdrawal(id)
       setWithdrawals((prev) => prev.map((w) => w.id === id ? { ...w, status: 'APPROVED' } : w))
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to approve withdrawal')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to approve withdrawal'))
     } finally {
       setActionLoading(null)
     }
@@ -61,8 +76,8 @@ export function AdminWithdrawalsPage() {
     try {
       await adminApi.rejectWithdrawal(id, 'Rejected by admin')
       setWithdrawals((prev) => prev.map((w) => w.id === id ? { ...w, status: 'REJECTED' } : w))
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to reject withdrawal')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to reject withdrawal'))
     } finally {
       setActionLoading(null)
     }
@@ -89,11 +104,35 @@ export function AdminWithdrawalsPage() {
             <h1 className="text-2xl font-bold text-white">Withdrawals</h1>
             <p className="text-gray-400 text-sm mt-1">Review withdrawal requests</p>
           </div>
+          <button
+            onClick={() =>
+              exportTableToPdf({
+                title: 'Withdrawal Requests',
+                subtitle: `Page ${page} of ${totalPages}`,
+                columns: ['User', 'Email', 'Amount', 'Method', 'Account', 'Status', 'Requested'],
+                rows: withdrawals.map((w) => [
+                  w.userName || '-',
+                  w.userEmail || '-',
+                  `₹${w.amount}`,
+                  w.method || '-',
+                  w.accountDetail || '-',
+                  w.status || '-',
+                  w.createdAt ? new Date(w.createdAt).toLocaleString('en-IN') : '-',
+                ]),
+                fileName: `rentbuddy-withdrawals-${new Date().toISOString().slice(0, 10)}`,
+                landscape: true,
+              })
+            }
+            disabled={withdrawals.length === 0}
+            className="ml-auto inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-gray-300 hover:text-white text-sm transition"
+          >
+            <FileDown className="w-4 h-4" /> PDF
+          </button>
         </div>
 
         <div className="mb-6">
           <div className="flex gap-2">
-            {['PENDING', 'APPROVED', 'REJECTED'].map((s) => (
+            {[['ALL', 'All'], ['PENDING', 'Pending'], ['APPROVED', 'Approved'], ['REJECTED', 'Rejected'], ['COMPLETED', 'Completed']].map(([s, label]) => (
               <button
                 key={s}
                 onClick={() => { setStatusFilter(s); setPage(1) }}
@@ -103,7 +142,7 @@ export function AdminWithdrawalsPage() {
                     : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
                 }`}
               >
-                {s.charAt(0) + s.slice(1).toLowerCase()}
+                {label}
               </button>
             ))}
           </div>
@@ -143,11 +182,15 @@ export function AdminWithdrawalsPage() {
                       <tr key={w.id} className="border-b border-gray-700/50 last:border-0">
                         <td className="px-4 py-3">
                           <p className="text-white text-sm font-medium">{w.userName || 'Unknown'}</p>
-                          {w.upiId && <p className="text-gray-500 text-xs">UPI: {w.upiId}</p>}
-                          {w.bankAccount && <p className="text-gray-500 text-xs">Bank: {w.bankAccount}</p>}
+                          {w.userEmail && <p className="text-gray-500 text-xs">{w.userEmail}</p>}
+                          {w.accountDetail && (
+                            <p className="text-gray-500 text-xs">
+                              {w.method ? `${w.method}: ` : ''}{w.accountDetail}
+                            </p>
+                          )}
                         </td>
                         <td className="px-4 py-3">
-                          <span className="text-white font-semibold">₹{(w.amount || 0).toLocaleString('en-IN')}</span>
+                          <span className="text-white font-semibold">₹{Number(w.amount || 0).toLocaleString('en-IN')}</span>
                         </td>
                         <td className="px-4 py-3">
                           <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusBadge(w.status)}`}>

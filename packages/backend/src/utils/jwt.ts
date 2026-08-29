@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env";
 import { AuthPayload } from "../types";
@@ -11,6 +12,7 @@ interface AccessTokenPayload {
 interface RefreshTokenPayload {
   userId: string;
   type: "refresh";
+  jti: string;
 }
 
 const accessSecret = env.JWT_ACCESS_SECRET ?? env.JWT_SECRET;
@@ -28,7 +30,11 @@ export function generateAccessToken(user: AuthPayload): string {
 }
 
 export function generateRefreshToken(userId: string): string {
-  const payload: RefreshTokenPayload = { userId, type: "refresh" };
+  const payload: RefreshTokenPayload = {
+    userId,
+    type: "refresh",
+    jti: crypto.randomUUID(),
+  };
   return jwt.sign(payload, refreshSecret, {
     expiresIn: env.JWT_REFRESH_EXPIRY as jwt.SignOptions["expiresIn"],
   });

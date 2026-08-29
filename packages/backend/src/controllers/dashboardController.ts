@@ -104,7 +104,7 @@ async function getAdminStats(userId: string, res: Response) {
   const [totalUsers, activePartners, pendingKYC, totalRevenue, recentUsers] = await Promise.all([
     prisma.user.count(),
     prisma.walkingPartner.count({ where: { status: "APPROVED" } }),
-    prisma.verification.count({ where: { status: "PENDING" } }),
+    prisma.verification.count({ where: { status: { in: ["SUBMITTED", "PENDING_REVIEW", "UNDER_VERIFICATION"] } } }),
     prisma.transaction.aggregate({ where: { status: "COMPLETED" }, _sum: { amount: true } }),
     prisma.user.findMany({
       orderBy: { createdAt: "desc" },

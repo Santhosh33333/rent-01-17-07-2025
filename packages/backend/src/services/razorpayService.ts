@@ -25,16 +25,45 @@ export async function createOrder(
   notes?: Record<string, any>
 ) {
   const razorpay = getRazorpay()
-  const order = await razorpay.orders.create({
-    amount: amount * 100,
+
+  if (amount <= 0) {
+    throw new Error(`Order amount must be greater than zero (got ${amount})`)
+  }
+
+  // Razorpay rejects receipts longer than 40 chars; keep it short and unique.
+  const safeReceipt = `${Buffer.from(receipt).toString("base64url").slice(0, 12)}_${Date.now().toString(36)}`
+
+  const orderPromise = razorpay.orders.create({
+    amount: Math.round(amount * 100),
     currency,
-    receipt,
+    receipt: safeReceipt,
     notes: {
       ...(notes ?? {}),
+      ...(receipt ? { originalReceipt: receipt.slice(0, 200) } : {}),
       ...(description ? { description } : {}),
     },
   })
+
+  // Fail fast instead of hanging when the Razorpay API is slow/unreachable.
+  // Keeps wallet top-up usable instead of timing out the whole request.
+  const order = await withTimeout(orderPromise, 12000)
   return order
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error("Razorpay request timed out")), ms)
+    p.then(
+      (res) => {
+        clearTimeout(t)
+        resolve(res)
+      },
+      (err) => {
+        clearTimeout(t)
+        reject(err)
+      }
+    )
+  })
 }
 
 export function verifyPayment(

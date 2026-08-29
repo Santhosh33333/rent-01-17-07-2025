@@ -1,6 +1,8 @@
+﻿import { getErrorMessage } from '../../lib/error'
 import { useState, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
+import { isClerkConfigured } from '../../lib/clerkAuth'
 import { initGoogleSignIn, signInWithGoogle } from '../../lib/googleAuth'
 import { AnimatedPage } from '../../components/AnimatedPage'
 import { ArrowRight, Sparkles, Mail, Lock, Loader2 } from 'lucide-react'
@@ -43,7 +45,10 @@ export function LoginPage() {
 
   useEffect(() => {
     if (user) {
-      if (!user.city && localStorage.getItem('profile_complete') !== 'true') {
+      const role = user.activeRole || user.role || 'USER'
+      // Only USER-role accounts use the shared completion page; other roles go
+      // straight to their own dashboard (the completion page is USER-scoped).
+      if (role === 'USER' && !user.city && localStorage.getItem('profile_complete') !== 'true') {
         navigate('/profile/complete', { replace: true })
       } else {
         navigate(getDashboardForUser(user), { replace: true })
@@ -70,8 +75,8 @@ export function LoginPage() {
       }
       localStorage.setItem('user', JSON.stringify(u))
       window.location.reload()
-    } catch (err: any) {
-      toast.error(err?.message || 'Google sign-in failed')
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Google sign-in failed'))
     } finally {
       setGoogleLoading(false)
     }
@@ -100,8 +105,8 @@ export function LoginPage() {
     try {
       await login(email, password)
       toast.success('Welcome back!')
-    } catch (err: any) {
-      setApiError(err?.response?.data?.error || err?.message || 'Login failed')
+    } catch (err: unknown) {
+      setApiError(getErrorMessage(err, 'Login failed'))
     } finally {
       setLoading(false)
     }
@@ -118,14 +123,11 @@ export function LoginPage() {
       <div className="relative w-full max-w-md">
         <AnimatedPage>
           <div className="text-center mb-10">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 via-primary-400 to-accent-500 shadow-xl shadow-primary-500/25 mb-5 animate-float">
-              <svg viewBox="0 0 24 24" className="w-8 h-8" fill="none">
-                <path d="M12 3L20 9V20H14V13H10V20H4V9L12 3Z" fill="white" fillOpacity="0.93"/>
-                <circle cx="9.5" cy="8.5" r="1.5" fill="#f97316" fillOpacity="0.9"/>
-                <circle cx="14.5" cy="8.5" r="1.5" fill="#f97316" fillOpacity="0.9"/>
-                <path d="M9.5 6.5Q12 4.5 14.5 6.5" stroke="white" strokeWidth="0.8" strokeOpacity="0.5" fill="none" strokeLinecap="round"/>
-              </svg>
-            </div>
+            <img
+              src="/logo-mark.svg"
+              alt="RentBuddy logo"
+              className="inline-block w-16 h-16 rounded-2xl shadow-xl shadow-primary-500/25 mb-5 animate-float"
+            />
             <h1 className="text-3xl font-bold font-display text-surface-900 dark:text-white tracking-tight">
               Welcome back
             </h1>
@@ -227,6 +229,22 @@ export function LoginPage() {
                 )}
               </button>
             </form>
+
+            {isClerkConfigured() && (
+              <div className="mt-5">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="h-px flex-1 bg-surface-200 dark:bg-surface-700" />
+                  <span className="text-xs text-surface-400">or</span>
+                  <div className="h-px flex-1 bg-surface-200 dark:bg-surface-700" />
+                </div>
+                <Link
+                  to="/sign-in"
+                  className="w-full py-3 rounded-xl border border-surface-300 dark:border-surface-600 text-sm font-semibold text-surface-700 dark:text-surface-200 hover:border-primary-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors flex items-center justify-center"
+                >
+                  Continue with Clerk&nbsp;Â·&nbsp;Google, OTP & more
+                </Link>
+              </div>
+            )}
           </div>
 
           <p className="mt-8 text-center text-sm text-surface-500 dark:text-surface-400">

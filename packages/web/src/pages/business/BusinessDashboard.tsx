@@ -3,7 +3,7 @@ import { Building, Users, ShoppingBag, BarChart3, TrendingUp, DollarSign, Gift, 
 import toast from 'react-hot-toast'
 import { AnimatedPage } from '../../components/AnimatedPage'
 import { GlassCard } from '../../components/GlassCard'
-import { api } from '../../lib/api'
+import { api, assetUrl } from '../../lib/api'
 
 interface Profile {
   fullName?: string
@@ -146,7 +146,7 @@ export function BusinessDashboard() {
             <div className="flex items-center gap-3">
               <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center ring-2 ring-white/30">
                 {profile.avatar ? (
-                  <img src={profile.avatar} alt={displayName} className="w-14 h-14 rounded-2xl object-cover" />
+                  <img src={assetUrl(profile.avatar) || ''} alt={displayName} className="w-14 h-14 rounded-2xl object-cover" />
                 ) : (
                   <Building className="w-7 h-7" />
                 )}

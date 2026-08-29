@@ -60,7 +60,7 @@ export function OnboardingPage() {
       goToStep(currentStep + 1)
     } else {
       localStorage.setItem('onboarding_complete', 'true')
-      navigate('/login', { replace: true })
+      navigate('/account-type', { replace: true })
     }
   }
 
@@ -72,7 +72,7 @@ export function OnboardingPage() {
 
   const handleSkip = () => {
     localStorage.setItem('onboarding_complete', 'true')
-    navigate('/login', { replace: true })
+    navigate('/account-type', { replace: true })
   }
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -242,3 +242,4 @@ export function OnboardingPage() {
     </>
   )
 }
+

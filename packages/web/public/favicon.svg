@@ -1,63 +1,26 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#6366f1"/>
-      <stop offset="50%" stop-color="#818cf8"/>
-      <stop offset="100%" stop-color="#f97316"/>
+    <linearGradient id="rbTile" x1="64" y1="40" x2="460" y2="484" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6366F1"/>
+      <stop offset="0.52" stop-color="#8B5CF6"/>
+      <stop offset="1" stop-color="#EC4899"/>
     </linearGradient>
-    <linearGradient id="house" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="100%" stop-color="#f0f0ff"/>
+    <linearGradient id="rbInner" x1="150" y1="120" x2="370" y2="360" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4F46E5"/>
+      <stop offset="1" stop-color="#DB2777"/>
     </linearGradient>
-    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
-      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.2"/>
-    </filter>
   </defs>
 
-  <!-- Background rounded square -->
-  <rect width="512" height="512" rx="108" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="116" fill="url(#rbTile)"/>
+  <circle cx="118" cy="92" r="150" fill="#FFFFFF" opacity="0.08"/>
 
-  <!-- Subtle texture circles -->
-  <circle cx="400" cy="100" r="180" fill="white" opacity="0.04"/>
-  <circle cx="100" cy="420" r="140" fill="white" opacity="0.04"/>
+  <path d="M78 446 Q158 500 252 456" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" stroke-dasharray="0.1 30" opacity="0.9"/>
+  <circle cx="78" cy="446" r="13" fill="#FFFFFF"/>
 
-  <!-- House body -->
-  <g filter="url(#shadow)">
-    <!-- Roof -->
-    <path d="M256 110 L410 230 L390 230 L390 370 L122 370 L122 230 L102 230 Z"
-          fill="url(#house)" opacity="0.95"/>
+  <path d="M256 74 C167 74 106 139 106 222 C106 297 171 353 223 397 Q243 414 254 432 C266 415 283 400 301 385 C351 344 406 292 406 222 C406 139 345 74 256 74 Z" fill="#FFFFFF"/>
 
-    <!-- Door -->
-    <rect x="224" y="290" width="64" height="80" rx="8" fill="#6366f1" opacity="0.85"/>
-    <circle cx="276" cy="335" r="5" fill="white" opacity="0.9"/>
-
-    <!-- Window left -->
-    <rect x="148" y="252" width="52" height="44" rx="6" fill="#818cf8" opacity="0.6"/>
-    <line x1="174" y1="252" x2="174" y2="296" stroke="white" stroke-width="2" opacity="0.5"/>
-    <line x1="148" y1="274" x2="200" y2="274" stroke="white" stroke-width="2" opacity="0.5"/>
-
-    <!-- Window right -->
-    <rect x="312" y="252" width="52" height="44" rx="6" fill="#818cf8" opacity="0.6"/>
-    <line x1="338" y1="252" x2="338" y2="296" stroke="white" stroke-width="2" opacity="0.5"/>
-    <line x1="312" y1="274" x2="364" y2="274" stroke="white" stroke-width="2" opacity="0.5"/>
-  </g>
-
-  <!-- Two people / buddies indicator -->
-  <g transform="translate(256, 175)">
-    <!-- Person 1 -->
-    <circle cx="-22" cy="0" r="16" fill="#f97316" opacity="0.9"/>
-    <path d="M-38 28 Q-38 12 -22 12 Q-6 12 -6 28" fill="#f97316" opacity="0.7"/>
-
-    <!-- Person 2 -->
-    <circle cx="22" cy="0" r="16" fill="#f97316" opacity="0.9"/>
-    <path d="M6 28 Q6 12 22 12 Q38 12 38 28" fill="#f97316" opacity="0.7"/>
-
-    <!-- Connection arc -->
-    <path d="M-22 -20 Q0 -38 22 -20" stroke="white" stroke-width="3" fill="none" opacity="0.6" stroke-linecap="round"/>
-  </g>
-
-  <!-- Small accent dots -->
-  <circle cx="256" cy="410" r="4" fill="white" opacity="0.3"/>
-  <circle cx="240" cy="410" r="3" fill="white" opacity="0.2"/>
-  <circle cx="272" cy="410" r="3" fill="white" opacity="0.2"/>
+  <circle cx="213" cy="184" r="33" fill="url(#rbInner)"/>
+  <circle cx="299" cy="184" r="33" fill="url(#rbInner)"/>
+  <rect x="173" y="228" width="82" height="114" rx="39" fill="url(#rbInner)" transform="rotate(-9 214 285)"/>
+  <rect x="257" y="228" width="82" height="114" rx="39" fill="url(#rbInner)" transform="rotate(9 298 285)"/>
 </svg>

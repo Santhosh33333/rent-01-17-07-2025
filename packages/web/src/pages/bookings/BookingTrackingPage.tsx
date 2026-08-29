@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  Navigation, Phone, XCircle, AlertTriangle, Loader2, MapPin, Clock, Star, MessageCircle
+  Navigation, Phone, XCircle, AlertTriangle, Loader2, MapPin, Clock, Star, MessageCircle, Siren
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { api } from '../../lib/api'
+import { api, assetUrl } from '../../lib/api'
 import { AnimatedPage } from '../../components/AnimatedPage'
 import { useBookingTracking } from '../../hooks/useSocket'
 import { GlassCard } from '../../components/GlassCard'
+import { LiveMap, MapPoint } from '../../components/LiveMap'
 
 interface Booking {
   id: string
@@ -27,6 +28,7 @@ interface Booking {
       phone: string
       avatarUrl?: string
     }
+    averageRating?: number
   }
   estimatedAmount?: number
   scheduledAt: string
@@ -46,17 +48,33 @@ export function BookingTrackingPage() {
   const [loading, setLoading] = useState(true)
   const [cancelling, setCancelling] = useState(false)
   const [currentLocation, setCurrentLocation] = useState<LocationData | null>(null)
+  const [trail, setTrail] = useState<{ lat: number; lng: number }[]>([]);
   const [eta, setETA] = useState<{ minutes: number; distance: number } | null>(null)
+  const [userGeo, setUserGeo] = useState<MapPoint | null>(null)
+  const [sosAlert, setSosAlert] = useState<{ message: string; timestamp: number } | null>(null)
 
   // WebSocket tracking
-  const { listenToLocationUpdates, listenToETAUpdates, requestETA } = useBookingTracking(id || '')
+  const { listenToLocationUpdates, listenToETAUpdates, requestETA, sendSOS, listenToSOSAlerts } =
+    useBookingTracking(id || '')
 
   useEffect(() => {
     if (!id) return
     const fetchBooking = async () => {
       try {
         const res = await api.get(`/bookings/${id}`)
-        setBooking(res.data?.data || res.data)
+        const data = res.data?.data || res.data
+        setBooking(data)
+        // Seed the map with the partner's last-known real GPS immediately.
+        if (data?.partnerLocation && Number.isFinite(data.partnerLocation.latitude)) {
+          const seed = {
+            latitude: data.partnerLocation.latitude,
+            longitude: data.partnerLocation.longitude,
+          }
+          setCurrentLocation((prev) => prev ?? seed)
+          setTrail((prev) =>
+            prev.length ? prev : [{ lat: seed.latitude, lng: seed.longitude }]
+          )
+        }
       } catch {
         toast.error('Failed to load booking')
       } finally {
@@ -77,6 +95,10 @@ export function BookingTrackingPage() {
         speed: data.speed,
         heading: data.heading,
       })
+      setTrail((prev) => {
+        const next = [...prev, { lat: data.latitude, lng: data.longitude }]
+        return next.length > 60 ? next.slice(next.length - 60) : next
+      })
     })
     return unsubscribe
   }, [listenToLocationUpdates])
@@ -85,8 +107,8 @@ export function BookingTrackingPage() {
   useEffect(() => {
     const unsubscribe = listenToETAUpdates((data) => {
       setETA({
-        minutes: data.eta,
-        distance: data.distance,
+        minutes: data.eta ?? 0,
+        distance: data.distance ?? 0,
       })
     })
     return unsubscribe
@@ -101,6 +123,25 @@ export function BookingTrackingPage() {
       return () => clearInterval(interval)
     }
   }, [booking, requestETA])
+
+  // Track the user's own live position (for the map)
+  useEffect(() => {
+    if (!('geolocation' in navigator)) return
+    const watch = navigator.geolocation.watchPosition(
+      (pos) => setUserGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+    )
+    return () => navigator.geolocation.clearWatch(watch)
+  }, [])
+
+  // Listen for incoming SOS alerts (e.g. from the partner)
+  useEffect(() => {
+    const unsub = listenToSOSAlerts((a: any) => {
+      setSosAlert({ message: a.message, timestamp: a.timestamp })
+    })
+    return unsub
+  }, [listenToSOSAlerts])
 
   const handleCancel = async () => {
     if (!id) return
@@ -119,8 +160,13 @@ export function BookingTrackingPage() {
 
   const handleSOS = async () => {
     try {
-      await api.post(`/bookings/${id}/sos`)
-      toast('🚨 Emergency services contacted. Stay safe.', { duration: 5000 })
+      await api.post('/users/sos/trigger', {
+        latitude: userGeo?.lat ?? currentLocation?.latitude,
+        longitude: userGeo?.lng ?? currentLocation?.longitude,
+        message: `Emergency SOS during booking ${id}`,
+      })
+      sendSOS(`Emergency SOS during booking ${id}`, userGeo?.lat, userGeo?.lng)
+      toast('🚨 Emergency SOS sent to partner & admins. Stay safe.', { duration: 5000 })
     } catch {
       toast.error('Failed to send SOS')
     }
@@ -134,7 +180,8 @@ export function BookingTrackingPage() {
   }
 
   const handleChat = () => {
-    navigate(`/messages/${booking?.partnerId}`)
+    const partnerUserId = (booking?.partner as any)?.user?.id
+    if (partnerUserId) navigate(`/messages/${partnerUserId}`)
   }
 
   const getStatusColor = (status: string) => {
@@ -164,7 +211,7 @@ export function BookingTrackingPage() {
   }
 
   const partnerName = booking?.partner?.user.fullName || 'Partner'
-  const partnerAvatar = booking?.partner?.user.avatarUrl
+  const partnerAvatar = assetUrl(booking?.partner?.user.avatarUrl)
 
   if (loading) {
     return (
@@ -190,51 +237,16 @@ export function BookingTrackingPage() {
 
   return (
     <div className="fixed inset-0 z-50">
-      {/* Animated Map Background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-sky-100 via-emerald-50 to-blue-100 dark:from-sky-900 dark:via-emerald-900 dark:to-blue-900">
-        {/* Animated route line (simplified) */}
-        <svg className="absolute inset-0 w-full h-full">
-          <defs>
-            <linearGradient id="routeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#10b981" stopOpacity="0.6" />
-              <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.6" />
-            </linearGradient>
-            <style>{`
-              @keyframes dashAnimation {
-                to { stroke-dashoffset: 0; }
-              }
-              .animated-line {
-                animation: dashAnimation 3s linear infinite;
-              }
-            `}</style>
-          </defs>
-          {/* Route path - simplified diagonal */}
-          <polyline
-            points="10%,80% 90%,20%"
-            fill="none"
-            stroke="url(#routeGradient)"
-            strokeWidth="4"
-            strokeDasharray="10,5"
-            className="animated-line"
-          />
-          {/* Start marker */}
-          <circle cx="10%" cy="80%" r="8" fill="#10b981" opacity="0.8" />
-          {/* End marker */}
-          <circle cx="90%" cy="20%" r="8" fill="#3b82f6" opacity="0.8" />
-          {/* Current location marker (animated) */}
-          {currentLocation && (
-            <g>
-              <circle cx="50%" cy="50%" r="12" fill="#ef4444" opacity="0.3">
-                <animate attributeName="r" from="12" to="28" dur="2s" repeatCount="indefinite" />
-              </circle>
-              <circle cx="50%" cy="50%" r="6" fill="#ef4444" />
-            </g>
-          )}
-        </svg>
-
-        {/* Decorative background shapes */}
-        <div className="absolute top-1/4 left-1/4 w-32 h-32 rounded-full bg-emerald-200/30 dark:bg-emerald-800/20 blur-2xl" />
-        <div className="absolute bottom-1/3 right-1/4 w-40 h-40 rounded-full bg-sky-200/30 dark:bg-sky-800/20 blur-2xl" />
+      {/* Live Map Background (real OpenStreetMap) */}
+      <div className="absolute inset-0">
+        <LiveMap
+          partner={currentLocation ? { lat: currentLocation.latitude, lng: currentLocation.longitude } : null}
+          user={userGeo}
+          trail={trail}
+          height="100%"
+        />
+        {/* Subtle tint for contrast */}
+        <div className="absolute inset-0 bg-gradient-to-br from-sky-100/30 via-transparent to-blue-100/30 dark:from-sky-900/30 dark:via-transparent dark:to-blue-900/30 pointer-events-none" />
       </div>
 
       {/* Top bar with status */}
@@ -257,6 +269,18 @@ export function BookingTrackingPage() {
       <div className="absolute bottom-0 left-0 right-0 z-10 max-h-[60vh] overflow-y-auto">
         <AnimatedPage>
           <div className="bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl rounded-t-3xl p-6 shadow-2xl border-t border-white/20 space-y-4">
+            {/* SOS alert banner */}
+            {sosAlert && (
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-red-100 dark:bg-red-900/40 border border-red-500 text-red-700 dark:text-red-200">
+                <Siren className="w-5 h-5 animate-pulse" />
+                <div>
+                  <p className="font-semibold text-sm">SOS ALERT</p>
+                  <p className="text-xs">{sosAlert.message}</p>
+                  <p className="text-[11px] opacity-80">{new Date(sosAlert.timestamp).toLocaleTimeString('en-IN')}</p>
+                </div>
+              </div>
+            )}
+
             {/* Partner Info */}
             {partnerName && (
               <GlassCard variant="elevated" padding="md">
@@ -272,7 +296,7 @@ export function BookingTrackingPage() {
                     <p className="text-sm font-bold text-surface-900 dark:text-white">{partnerName}</p>
                     <div className="flex items-center gap-1 mt-0.5">
                       <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                      <span className="text-xs text-surface-500">4.8 rating</span>
+                      <span className="text-xs text-surface-500">{booking?.partner?.averageRating ? `${booking.partner.averageRating.toFixed(1)} rating` : 'New partner'}</span>
                     </div>
                   </div>
                   <div className="flex gap-2">
@@ -333,10 +357,10 @@ export function BookingTrackingPage() {
               </GlassCard>
             )}
 
-            {/* Current Location & Speed */}
+            {/* Partner Live Location */}
             {currentLocation && (
               <GlassCard variant="default" padding="md" className="space-y-2">
-                <p className="text-xs text-surface-500">Current Location</p>
+                <p className="text-xs text-surface-500">Partner Live Location</p>
                 <p className="font-mono text-sm text-surface-700 dark:text-surface-300">
                   {currentLocation.latitude.toFixed(4)}, {currentLocation.longitude.toFixed(4)}
                 </p>
@@ -348,6 +372,16 @@ export function BookingTrackingPage() {
                     </span>
                   </div>
                 )}
+              </GlassCard>
+            )}
+
+            {/* Your Live Location */}
+            {userGeo && (
+              <GlassCard variant="default" padding="md" className="space-y-2">
+                <p className="text-xs text-surface-500">Your Live Location</p>
+                <p className="font-mono text-sm text-surface-700 dark:text-surface-300">
+                  {userGeo.lat.toFixed(4)}, {userGeo.lng.toFixed(4)}
+                </p>
               </GlassCard>
             )}
 

@@ -1,13 +1,13 @@
 import { Router } from "express";
 import { body, param } from "express-validator";
-import { authenticateToken } from "../middleware/auth";
+import { authenticateToken, requireKycVerified } from "../middleware/auth";
 import { requireWalkingPartner } from "../middleware/auth";
 import { sanitizeInput, validateRequest } from "../middleware/validation";
 import * as walkingRequestController from "../controllers/walkingRequestController";
 
 const router = Router();
 
-router.use(authenticateToken);
+router.use(authenticateToken, requireKycVerified);
 
 router.post(
   "/",
@@ -32,3 +32,4 @@ router.post("/:id/confirm", walkingRequestController.confirmWalkCompletion);
 router.delete("/:id", walkingRequestController.cancelWalkingRequest);
 
 export default router;
+

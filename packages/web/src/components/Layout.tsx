@@ -6,9 +6,24 @@ import {
   ClipboardList, Search
 } from 'lucide-react';
 import { useAuth } from '../lib/auth';
+import { isClerkConfigured } from '../lib/clerkAuth';
+import { UserButton, useUser } from '@clerk/clerk-react';
+
+function ClerkUserButton() {
+  const { isSignedIn } = useUser();
+  if (!isSignedIn) return null;
+  return (
+    <div className="px-3 py-2">
+      <p className="text-[11px] uppercase tracking-wide text-gray-400 mb-2">Clerk account</p>
+      <UserButton afterSignOutUrl="/account-type" />
+    </div>
+  );
+}
 import { useRole } from '../lib/roleContext';
 import { useTheme } from '../lib/themeContext';
 import { RoleSwitcher } from './RoleSwitcher';
+import { PartnerLiveLocationSharer } from './PartnerLiveLocationSharer';
+import { UserLiveLocationSharer } from './UserLiveLocationSharer';
 
 const userNav = [
   { to: '/home', icon: Home, label: 'Home' },
@@ -31,6 +46,7 @@ const adminNav = [
   { to: '/admin/users', icon: Users, label: 'Users' },
   { to: '/admin/partners', icon: Users, label: 'Partners' },
   { to: '/admin/payments', icon: Wallet, label: 'Payments' },
+  { to: '/admin/live-tracking', icon: MapPin, label: 'Live' },
   { to: '/admin/reports', icon: Shield, label: 'Reports' },
 ];
 
@@ -78,16 +94,9 @@ export function Layout() {
               >
                 <Menu className="w-5 h-5" />
               </button>
-              <Link to="/dashboard" className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 via-indigo-400 to-orange-500 flex items-center justify-center">
-                  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none">
-                    <path d="M12 3L20 9V20H14V13H10V20H4V9L12 3Z" fill="white" fillOpacity="0.93"/>
-                    <circle cx="9.5" cy="8.5" r="1.5" fill="#f97316" fillOpacity="0.9"/>
-                    <circle cx="14.5" cy="8.5" r="1.5" fill="#f97316" fillOpacity="0.9"/>
-                    <path d="M9.5 6.5Q12 4.5 14.5 6.5" stroke="white" strokeWidth="0.8" strokeOpacity="0.5" fill="none" strokeLinecap="round"/>
-                  </svg>
-                </div>
-                <span className="text-lg font-bold bg-gradient-to-r from-indigo-600 to-orange-500 bg-clip-text text-transparent hidden sm:block">
+              <Link to="/dashboard" className="flex items-center gap-2.5">
+                <img src="/logo-mark.svg" alt="RentBuddy logo" className="w-9 h-9 rounded-xl shadow-md shadow-primary-500/25" />
+                <span className="text-lg font-extrabold font-display tracking-tight bg-gradient-to-r from-indigo-600 via-violet-600 to-pink-500 bg-clip-text text-transparent hidden sm:block">
                   RentBuddy
                 </span>
               </Link>
@@ -170,12 +179,18 @@ export function Layout() {
               <LogOut className="w-4 h-4" />
               Sign Out
             </button>
+
+            {isClerkConfigured() && <ClerkUserButton />}
           </div>
         </>
       )}
 
       {/* Main Content */}
       <main className="pb-20 lg:pb-4">
+        {/* Partners silently stream live GPS for their active booking so the
+            user can track them in real time (no UI of its own). */}
+        <PartnerLiveLocationSharer />
+        <UserLiveLocationSharer />
         <Outlet />
       </main>
 

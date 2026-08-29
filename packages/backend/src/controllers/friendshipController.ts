@@ -2,6 +2,8 @@ import { Response } from "express";
 import { prisma } from "../config/database";
 import { sendSuccess, sendError } from "../utils/response";
 import { AuthedRequest } from "../middleware/authTypes";
+import { createNotification } from "./notificationController";
+import { sendPushNotification } from "../services/notificationService";
 
 export async function sendRequest(req: AuthedRequest, res: Response): Promise<void> {
   try {
@@ -31,6 +33,17 @@ export async function sendRequest(req: AuthedRequest, res: Response): Promise<vo
     const friendship = await prisma.friendship.create({
       data: { requesterId: userId, addresseeId, status: "PENDING" },
     });
+    const reqName = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { fullName: true },
+    });
+    void createNotification(
+      addresseeId,
+      "New friend request",
+      `${reqName?.fullName ?? "Someone"} sent you a friend request.`,
+      { type: "FRIEND_REQUEST", friendshipId: friendship.id }
+    );
+    void sendPushNotification(addresseeId, "New friend request", `${reqName?.fullName ?? "Someone"} sent you a friend request.`, { type: "FRIEND_REQUEST" });
     sendSuccess(res, friendship, "Friend request sent.", 201);
   } catch (err) {
     sendError(res, "Failed to send friend request.", 500, "INTERNAL_ERROR");
@@ -57,6 +70,17 @@ export async function acceptRequest(req: AuthedRequest, res: Response): Promise<
       where: { id },
       data: { status: "ACCEPTED" },
     });
+    const addName = await prisma.user.findUnique({
+      where: { id: friendship.addresseeId },
+      select: { fullName: true },
+    });
+    void createNotification(
+      friendship.requesterId,
+      "Friend request accepted",
+      `${addName?.fullName ?? "Someone"} accepted your friend request.`,
+      { type: "FRIEND_ACCEPTED", friendshipId: friendship.id }
+    );
+    void sendPushNotification(friendship.requesterId, "Friend request accepted", `${addName?.fullName ?? "Someone"} accepted your friend request.`, { type: "FRIEND_ACCEPTED" });
     sendSuccess(res, updated, "Friend request accepted.");
   } catch (err) {
     sendError(res, "Failed to accept friend request.", 500, "INTERNAL_ERROR");

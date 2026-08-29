@@ -176,8 +176,9 @@ export async function getRoleApplication(req: AuthedRequest, res: Response): Pro
       return;
     }
 
-    // Check permissions
-    const isAdmin = ["ADMIN", "SUPER_ADMIN", "MODERATOR"].includes(roleApplication.user?.role || "");
+    // Check permissions — verify the REQUESTING user's role, not the applicant's
+    const requestingUser = await prisma.user.findUnique({ where: { id: userId }, select: { role: true, activeRole: true } });
+    const isAdmin = ["ADMIN", "SUPER_ADMIN", "MODERATOR"].includes(requestingUser?.activeRole || requestingUser?.role || "");
     if (!isAdmin && roleApplication.userId !== userId) {
       sendError(res, "Access denied.", 403, "FORBIDDEN");
       return;
@@ -217,36 +218,40 @@ export async function approveRoleApplication(req: AuthedRequest, res: Response):
       return;
     }
 
-    // Update user's role and create/update Partner based on application
+    // Atomic: all three operations in a single transaction to prevent
+    // inconsistent state if the process crashes between steps.
     let activeRole: string | undefined;
     if (roleApplication.role === "PARTNER") {
       activeRole = "PARTNER";
-      await prisma.partner.upsert({
-        where: { userId: roleApplication.userId },
-        update: { status: "APPROVED", providesWalking: true, providesCarry: true },
-        create: { userId: roleApplication.userId, status: "APPROVED", providesWalking: true, providesCarry: true },
-      });
     }
 
-    // Update role application
-    await prisma.roleApplication.update({
-      where: { id },
-      data: {
-        status: "APPROVED",
-        reviewedBy: reviewerId,
-        reviewedAt: new Date(),
-        rejectionReason: null,
+    await prisma.$transaction(async (tx) => {
+      if (activeRole) {
+        await tx.partner.upsert({
+          where: { userId: roleApplication.userId },
+          update: { status: "APPROVED", providesWalking: true, providesCarry: true },
+          create: { userId: roleApplication.userId, status: "APPROVED", providesWalking: true, providesCarry: true },
+        });
+      }
+
+      await tx.roleApplication.update({
+        where: { id },
+        data: {
+          status: "APPROVED",
+          reviewedBy: reviewerId,
+          reviewedAt: new Date(),
+          rejectionReason: null,
+        }
+      });
+
+      if (activeRole) {
+        await tx.user.update({
+          where: { id: roleApplication.userId },
+          data: { activeRole },
+          select: { id: true, activeRole: true, role: true }
+        });
       }
     });
-
-    // Update user's active role
-    if (activeRole) {
-      await prisma.user.update({
-        where: { id: roleApplication.userId },
-        data: { activeRole },
-        select: { id: true, activeRole: true, role: true }
-      });
-    }
 
     sendSuccess(res, { 
       application: roleApplication,

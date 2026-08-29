@@ -27,17 +27,11 @@ export function AboutPage() {
 
       <AnimatedPage>
         <GlassCard variant="elevated" padding="lg" className="text-center">
-          <div className="w-20 h-20 mx-auto rounded-3xl bg-gradient-to-br from-primary-500 via-primary-400 to-accent-500 flex items-center justify-center shadow-xl shadow-primary-500/30 mb-4">
-            <svg viewBox="0 0 24 24" className="w-10 h-10" fill="none">
-              <path d="M12 3L20 9V20H14V13H10V20H4V9L12 3Z" fill="white" fillOpacity="0.93"/>
-              <rect x="10" y="13" width="4" height="7" rx="0.5" fill="#6366f1" fillOpacity="0.7"/>
-              <rect x="5.5" y="10" width="3.5" height="3" rx="0.5" fill="#818cf8" fillOpacity="0.5"/>
-              <rect x="15" y="10" width="3.5" height="3" rx="0.5" fill="#818cf8" fillOpacity="0.5"/>
-              <circle cx="9" cy="7.5" r="1.2" fill="#f97316" fillOpacity="0.9"/>
-              <circle cx="15" cy="7.5" r="1.2" fill="#f97316" fillOpacity="0.9"/>
-              <path d="M9 5.8Q12 4 15 5.8" stroke="white" strokeWidth="0.6" strokeOpacity="0.5" fill="none" strokeLinecap="round"/>
-            </svg>
-          </div>
+          <img
+            src="/logo-mark.svg"
+            alt="RentBuddy logo"
+            className="w-20 h-20 mx-auto rounded-3xl shadow-xl shadow-primary-500/30 mb-4"
+          />
           <h1 className="text-2xl font-bold font-display text-surface-900 dark:text-white">RentBuddy</h1>
           <p className="text-sm text-surface-500 mt-1">Trust-based social platform</p>
           <div className="flex items-center justify-center gap-4 mt-3 text-xs text-surface-400">

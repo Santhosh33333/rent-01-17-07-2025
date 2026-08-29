@@ -1,3 +1,4 @@
+﻿import { getErrorMessage } from '../../lib/error'
 import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
 import { Link } from 'react-router-dom'
@@ -5,6 +6,7 @@ import { Upload, CheckCircle, ArrowLeft, FileCheck, Shield, Clock, AlertTriangle
 import { api } from '../../lib/api'
 import { AnimatedPage } from '../../components/AnimatedPage'
 import { GlassCard } from '../../components/GlassCard'
+import { AuthImage } from '../../components/AuthImage'
 
 const GOV_ID_TYPES = [
   { value: 'PASSPORT', label: 'Passport' },
@@ -86,8 +88,8 @@ export function VerifyGovIdPage() {
       setOverallStatus('PENDING')
       setSelectedFile(null)
       setPreviewUrl(null)
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Upload failed')
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Upload failed'))
     } finally {
       setUploading(false)
     }
@@ -101,8 +103,8 @@ export function VerifyGovIdPage() {
       setSubmittedGovIdType(null)
       setOverallStatus('UNVERIFIED')
       toast.success('Government ID removed')
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error || 'Failed to remove government ID')
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Failed to remove government ID'))
     } finally {
       setDeleting(false)
     }
@@ -174,7 +176,7 @@ export function VerifyGovIdPage() {
               </p>
               {govIdUrl && (
                 <div className="mb-6">
-                  <img src={govIdUrl} alt="Submitted ID" className="w-40 h-28 rounded-2xl object-cover border-2 border-surface-200 dark:border-surface-700" />
+                  <AuthImage url={govIdUrl} alt="Submitted ID" className="w-40 h-28 rounded-2xl object-cover border-2 border-surface-200 dark:border-surface-700" />
                 </div>
               )}
               <Link to="/verification" className="btn-primary">
@@ -198,7 +200,7 @@ export function VerifyGovIdPage() {
                   </div>
                 </div>
                 <div className="mt-3 flex items-center gap-3">
-                  <img src={govIdUrl} alt="Rejected ID" className="w-16 h-12 rounded-xl object-cover border border-red-200 dark:border-red-500/30" />
+                  <AuthImage url={govIdUrl} alt="Rejected ID" className="w-16 h-12 rounded-xl object-cover border border-red-200 dark:border-red-500/30" />
                   <div className="flex-1">
                     <p className="text-xs text-red-500">Current document</p>
                     {submittedGovIdType && <p className="text-xs text-red-400">Type: {govIdTypeLabel(submittedGovIdType)}</p>}

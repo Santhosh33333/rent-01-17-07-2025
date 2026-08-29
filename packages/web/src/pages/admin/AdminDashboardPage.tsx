@@ -1,7 +1,9 @@
+﻿import { getErrorMessage } from '../../lib/error'
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Users, Handshake, CalendarCheck, Wallet, ShieldCheck, Banknote } from 'lucide-react'
+import { ArrowLeft, Users, Handshake, CalendarCheck, Wallet, ShieldCheck, Banknote, FileDown } from 'lucide-react'
 import { adminApi } from '../../lib/api'
+import { exportTableToPdf } from '../../lib/pdfExport'
 
 interface DashboardData {
   totalUsers: number
@@ -27,8 +29,8 @@ export function AdminDashboardPage() {
       try {
         const res = await adminApi.getDashboard()
         setData(res.data?.data || res.data)
-      } catch (err: any) {
-        setError(err.response?.data?.message || 'Failed to load dashboard')
+      } catch (err: unknown) {
+        setError(getErrorMessage(err, 'Failed to load dashboard'))
       } finally {
         setLoading(false)
       }
@@ -88,7 +90,7 @@ export function AdminDashboardPage() {
     },
     {
       label: 'Total Bookings', value: data?.totalBookings ?? 0, icon: CalendarCheck, color: 'text-violet-400',
-      sub: `${data?.activeBookings ?? 0} active · ${data?.completedBookings ?? 0} completed`
+      sub: `${data?.activeBookings ?? 0} active Â· ${data?.completedBookings ?? 0} completed`
     },
     {
       label: 'Wallet Balance', value: `₹${(data?.totalWalletBalance ?? 0).toLocaleString('en-IN')}`, icon: Wallet, color: 'text-cyan-400',
@@ -104,6 +106,15 @@ export function AdminDashboardPage() {
     },
   ]
 
+  const downloadPdf = () => {
+    exportTableToPdf({
+      title: 'Platform Overview',
+      columns: ['Metric', 'Value', 'Details'],
+      rows: stats.map((s) => [s.label, s.value, s.sub]),
+      fileName: `rentbuddy-dashboard-${new Date().toISOString().slice(0, 10)}`,
+    })
+  }
+
   return (
     <div className="min-h-screen bg-gray-950 p-6">
       <div className="max-w-5xl mx-auto">
@@ -115,6 +126,12 @@ export function AdminDashboardPage() {
             <h1 className="text-2xl font-bold text-white">Dashboard</h1>
             <p className="text-gray-400 text-sm mt-1">Platform overview & analytics</p>
           </div>
+          <button
+            onClick={downloadPdf}
+            className="ml-auto inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white text-sm transition"
+          >
+            <FileDown className="w-4 h-4" /> PDF
+          </button>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

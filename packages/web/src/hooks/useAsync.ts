@@ -6,9 +6,9 @@ interface UseAsyncState<T> {
   error: Error | null
 }
 
-interface UseAsyncOptions {
+interface UseAsyncOptions<T> {
   immediate?: boolean
-  onSuccess?: (data: any) => void
+  onSuccess?: (data: T) => void
   onError?: (error: Error) => void
 }
 
@@ -21,7 +21,7 @@ interface UseAsyncOptions {
 export function useAsync<T>(
   asyncFunction: () => Promise<T>,
   immediate = true,
-  options?: UseAsyncOptions
+  options?: UseAsyncOptions<T>
 ) {
   const [state, setState] = useState<UseAsyncState<T>>({
     data: null,

@@ -91,20 +91,28 @@ export async function acceptWalkingRequest(req: AuthedRequest, res: Response): P
       return;
     }
 
-    await prisma.$transaction([
-      prisma.walkingRequestApplication.upsert({
+    await prisma.$transaction(async (tx) => {
+      // Atomic claim: only the first accepting partner wins
+      const claimed = await tx.walkingRequest.updateMany({
+        where: { id, status: "OPEN" },
+        data: { status: "ACCEPTED", acceptedById: req.user!.userId },
+      });
+      if (claimed.count !== 1) {
+        throw new Error("ALREADY_ACCEPTED");
+      }
+      await tx.walkingRequestApplication.upsert({
         where: { requestId_applicantId: { requestId: id, applicantId: req.user!.userId } },
         create: { requestId: id, applicantId: req.user!.userId, status: "ACCEPTED" },
         update: { status: "ACCEPTED" },
-      }),
-      prisma.walkingRequest.update({
-        where: { id },
-        data: { status: "ACCEPTED", acceptedById: req.user!.userId },
-      }),
-    ]);
+      });
+    });
     sendSuccess(res, undefined, "Walking request accepted.");
-  } catch (err) {
-    sendError(res, "Failed to accept walking request.", 500, "INTERNAL_ERROR");
+  } catch (err: any) {
+    if (err?.message === "ALREADY_ACCEPTED") {
+      sendError(res, "Walking request is no longer open.", 409, "ALREADY_ACCEPTED");
+    } else {
+      sendError(res, "Failed to accept walking request.", 500, "INTERNAL_ERROR");
+    }
   }
 }
 
@@ -168,23 +176,46 @@ export async function confirmWalkCompletion(req: AuthedRequest, res: Response): 
       return;
     }
     if (request.fare && request.completedById) {
-      await prisma.$transaction([
-        prisma.wallet.update({
-          where: { userId: request.completedById },
-          data: { balance: { increment: request.fare } },
-        }),
-        prisma.transaction.create({
-          data: {
-            walletId: (await prisma.wallet.findUnique({ where: { userId: request.completedById }, select: { id: true } }))!.id,
-            userId: request.completedById,
-            type: "CREDIT",
-            amount: request.fare,
-            description: `Walk payout for request ${id}`,
-          },
-        }),
-      ]);
+      // Atomic: credit wallet AND mark completed in a single transaction to
+      // prevent double-credit from concurrent confirmations.
+      const fare = request.fare;
+      const partnerUserId = request.completedById;
+      const wallet = await prisma.wallet.findUnique({ where: { userId: partnerUserId }, select: { id: true } });
+      if (wallet) {
+        const result = await prisma.$transaction(async (tx) => {
+          // Latch: only the first confirmation wins
+          const claimed = await tx.walkingRequest.updateMany({
+            where: { id, confirmedAt: null },
+            data: { confirmedAt: new Date(), status: "COMPLETED" },
+          });
+          if (claimed.count !== 1) return null;
+
+          await tx.wallet.update({
+            where: { userId: partnerUserId },
+            data: { balance: { increment: fare } },
+          });
+          await tx.transaction.create({
+            data: {
+              walletId: wallet.id,
+              userId: partnerUserId,
+              type: "CREDIT",
+              amount: fare,
+              description: `Walk payout for request ${id}`,
+            },
+          });
+          return true;
+        });
+        if (!result) {
+          sendSuccess(res, undefined, "Walk completion already confirmed.");
+          return;
+        }
+      } else {
+        // No wallet found — still mark completed
+        await prisma.walkingRequest.update({ where: { id }, data: { confirmedAt: new Date(), status: "COMPLETED" } });
+      }
+    } else {
+      await prisma.walkingRequest.update({ where: { id }, data: { confirmedAt: new Date(), status: "COMPLETED" } });
     }
-    await prisma.walkingRequest.update({ where: { id }, data: { confirmedAt: new Date(), status: "COMPLETED" } });
     sendSuccess(res, undefined, "Walk completion confirmed.");
   } catch (err) {
     sendError(res, "Failed to confirm walk completion.", 500, "INTERNAL_ERROR");

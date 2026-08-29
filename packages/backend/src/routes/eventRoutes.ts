@@ -1,12 +1,12 @@
 import { Router } from "express";
 import { body } from "express-validator";
-import { authenticateToken } from "../middleware/auth";
+import { authenticateToken, requireKycVerified } from "../middleware/auth";
 import { sanitizeInput, validateRequest } from "../middleware/validation";
 import * as eventController from "../controllers/eventController";
 
 const router = Router();
 
-router.use(authenticateToken);
+router.use(authenticateToken, requireKycVerified);
 
 // Create event
 router.post(
@@ -64,3 +64,4 @@ router.post("/:id/checkin", eventController.checkInEvent);
 router.get("/:id/attendees", eventController.getEventAttendees);
 
 export default router;
+

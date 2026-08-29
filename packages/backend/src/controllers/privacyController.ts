@@ -237,6 +237,111 @@ export async function getMutedList(req: AuthedRequest, res: Response): Promise<v
   }
 }
 
+// ============================================================================
+// PRIVACY PREFERENCES
+// ============================================================================
+
+interface PrivacyPreferences {
+  showOnlineStatus: boolean;
+  showLastActive: boolean;
+  allowProfileView: boolean;
+  allowLocationSharing: boolean;
+  showPhoneNumber: boolean;
+  showEmail: boolean;
+  searchableByPhone: boolean;
+  dataSharing: boolean;
+}
+
+const DEFAULT_PRIVACY_PREFS: PrivacyPreferences = {
+  showOnlineStatus: true,
+  showLastActive: true,
+  allowProfileView: true,
+  allowLocationSharing: false,
+  showPhoneNumber: false,
+  showEmail: false,
+  searchableByPhone: false,
+  dataSharing: false,
+};
+
+export async function getPrivacyPreferences(req: AuthedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) { sendError(res, "Unauthorized.", 401, "UNAUTHORIZED"); return; }
+
+    const entries = await prisma.appSettings.findMany({
+      where: { key: { startsWith: `user:${userId}:privacy:` } },
+    });
+    const prefs = { ...DEFAULT_PRIVACY_PREFS };
+    for (const entry of entries) {
+      const prefKey = entry.key.replace(`user:${userId}:privacy:`, "") as keyof PrivacyPreferences;
+      if (prefKey in prefs) {
+        (prefs as any)[prefKey] = entry.dataType === "BOOLEAN" ? entry.value === "true" : entry.value === "true";
+      }
+    }
+    sendSuccess(res, prefs, "Privacy preferences retrieved.");
+  } catch (err) {
+    sendError(res, "Failed to retrieve privacy preferences.", 500, "INTERNAL_ERROR");
+  }
+}
+
+export async function updatePrivacyPreferences(req: AuthedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) { sendError(res, "Unauthorized.", 401, "UNAUTHORIZED"); return; }
+
+    const allowedFields = Object.keys(DEFAULT_PRIVACY_PREFS);
+    const updates: Record<string, any> = {};
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+      }
+    }
+    if (Object.keys(updates).length === 0) {
+      sendError(res, "No valid fields to update.", 400, "VALIDATION_ERROR");
+      return;
+    }
+
+    const upserts: Promise<any>[] = [];
+    for (const [key, value] of Object.entries(updates)) {
+      upserts.push(
+        prisma.appSettings.upsert({
+          where: { key: `user:${userId}:privacy:${key}` },
+          update: { value: String(value), dataType: "BOOLEAN", updatedBy: userId },
+          create: {
+            key: `user:${userId}:privacy:${key}`,
+            value: String(value),
+            dataType: "BOOLEAN",
+            category: "USER_PRIVACY",
+            description: `Privacy preference: ${key}`,
+            isPublic: false,
+            updatedBy: userId,
+          },
+        })
+      );
+    }
+    await Promise.all(upserts);
+
+    // Return updated preferences
+    const entries = await prisma.appSettings.findMany({
+      where: { key: { startsWith: `user:${userId}:privacy:` } },
+    });
+    const prefs = { ...DEFAULT_PRIVACY_PREFS };
+    for (const entry of entries) {
+      const prefKey = entry.key.replace(`user:${userId}:privacy:`, "") as keyof PrivacyPreferences;
+      if (prefKey in prefs) {
+        (prefs as any)[prefKey] = entry.value === "true";
+      }
+    }
+    sendSuccess(res, prefs, "Privacy preferences updated.");
+  } catch (err) {
+    sendError(res, "Failed to update privacy preferences.", 500, "INTERNAL_ERROR");
+  }
+}
+
+// ============================================================================
+// REPORT CHAT
+// ============================================================================
+
 export async function reportChat(req: AuthedRequest, res: Response): Promise<void> {
   try {
     const userId = req.user?.userId;

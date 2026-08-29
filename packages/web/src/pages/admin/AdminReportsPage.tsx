@@ -1,7 +1,9 @@
+﻿import { getErrorMessage } from '../../lib/error'
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, CheckCircle, FileDown } from 'lucide-react'
 import { adminApi } from '../../lib/api'
+import { exportTableToPdf } from '../../lib/pdfExport'
 
 interface Report {
   id: string
@@ -21,7 +23,7 @@ export function AdminReportsPage() {
   const [error, setError] = useState('')
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
-  const [statusFilter, setStatusFilter] = useState('PENDING')
+  const [statusFilter, setStatusFilter] = useState('ALL')
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
   const fetchReports = async () => {
@@ -29,13 +31,25 @@ export function AdminReportsPage() {
     setError('')
     try {
       const params: any = { page }
-      if (statusFilter) params.status = statusFilter
+      if (statusFilter && statusFilter !== 'ALL') params.status = statusFilter
       const res = await adminApi.getReports(params)
       const d = res.data?.data || res.data
-      setReports(Array.isArray(d?.reports) ? d.reports : Array.isArray(d) ? d : [])
-      setTotalPages(d?.totalPages || 1)
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to load reports')
+      const raw = Array.isArray(d?.items) ? d.items : Array.isArray(d?.reports) ? d.reports : Array.isArray(d) ? d : []
+      setReports(raw.map((r: any) => ({
+        id: r.id,
+        reporterName: r.reporter?.fullName || r.reporterName || 'Unknown',
+        reporterId: r.reporterId || r.reporter?.id || '',
+        targetName: r.target?.fullName || r.targetName || 'Unknown',
+        targetId: r.targetId || r.target?.id || '',
+        reason: r.reason,
+        description: r.description,
+        status: r.status,
+        createdAt: r.createdAt,
+      })))
+      const total = Number(d?.total) || 0
+      setTotalPages(Math.max(1, Math.ceil(total / 20)))
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to load reports'))
     } finally {
       setLoading(false)
     }
@@ -50,8 +64,8 @@ export function AdminReportsPage() {
     try {
       await adminApi.resolveReport(id)
       setReports((prev) => prev.map((r) => r.id === id ? { ...r, status: 'RESOLVED' } : r))
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to resolve report')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to resolve report'))
     } finally {
       setActionLoading(null)
     }
@@ -77,11 +91,34 @@ export function AdminReportsPage() {
             <h1 className="text-2xl font-bold text-white">Reports</h1>
             <p className="text-gray-400 text-sm mt-1">Review user reports</p>
           </div>
+          <button
+            onClick={() =>
+              exportTableToPdf({
+                title: 'User Reports',
+                subtitle: `Page ${page} of ${totalPages}`,
+                columns: ['Reporter', 'Target', 'Reason', 'Description', 'Status', 'Date'],
+                rows: reports.map((r) => [
+                  r.reporterName || '-',
+                  r.targetName || '-',
+                  r.reason || '-',
+                  r.description || '-',
+                  r.status || '-',
+                  r.createdAt ? new Date(r.createdAt).toLocaleString('en-IN') : '-',
+                ]),
+                fileName: `rentbuddy-reports-${new Date().toISOString().slice(0, 10)}`,
+                landscape: true,
+              })
+            }
+            disabled={reports.length === 0}
+            className="ml-auto inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-gray-300 hover:text-white text-sm transition"
+          >
+            <FileDown className="w-4 h-4" /> PDF
+          </button>
         </div>
 
         <div className="mb-6">
           <div className="flex gap-2">
-            {['PENDING', 'RESOLVED', 'DISMISSED'].map((s) => (
+            {[['ALL', 'All'], ['PENDING', 'Pending'], ['RESOLVED', 'Resolved'], ['DISMISSED', 'Dismissed']].map(([s, label]) => (
               <button
                 key={s}
                 onClick={() => { setStatusFilter(s); setPage(1) }}
@@ -91,7 +128,7 @@ export function AdminReportsPage() {
                     : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
                 }`}
               >
-                {s.charAt(0) + s.slice(1).toLowerCase()}
+                {label}
               </button>
             ))}
           </div>

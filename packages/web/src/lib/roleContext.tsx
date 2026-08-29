@@ -48,7 +48,7 @@ function normalizeRole(raw: any): UserRole {
 }
 
 export function RoleProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth()
+  const { user, refreshProfile } = useAuth()
   const [approvedRoles, setApprovedRoles] = useState<UserRole[]>(['USER'])
   const [activeRole, setActiveRole] = useState<UserRole>(() => {
     return normalizeRole(localStorage.getItem('activeRole') || user?.activeRole || user?.role || 'USER')
@@ -87,16 +87,22 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     }
   }, [user?.id])
 
-  const switchRole = useCallback(async (role: UserRole) => {
-    try {
-      await api.post('/roles/switch', { role })
-      setActiveRole(role)
-      localStorage.setItem('activeRole', role)
-    } catch (err) {
-      console.error('Failed to switch role:', err)
-      throw err
-    }
-  }, [])
+  const switchRole = useCallback(
+    async (role: UserRole) => {
+      try {
+        await api.post('/roles/switch', { role })
+        setActiveRole(role)
+        localStorage.setItem('activeRole', role)
+        // Re-sync the full user profile + roles so downstream data (partner
+        // profile, wallet, permissions) reflects the newly active role.
+        await Promise.all([refreshRoles(), refreshProfile?.()])
+      } catch (err) {
+        console.error('Failed to switch role:', err)
+        throw err
+      }
+    },
+    [refreshRoles, refreshProfile],
+  )
 
   const applyForRole = useCallback(async (role: UserRole) => {
     try {

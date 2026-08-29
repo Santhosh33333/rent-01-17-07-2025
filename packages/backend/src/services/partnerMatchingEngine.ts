@@ -1,8 +1,13 @@
 import { prisma } from "../config/database";
 import { calculateDistance } from "../utils/location";
+import { getServiceDef } from "./serviceCatalog";
+
+function serviceLabel(type: string): string {
+  return getServiceDef(type)?.label ?? type;
+}
 
 interface MatchingCriteria {
-  serviceType: "WALKING" | "CARRY_BUDDY";
+  serviceType: string;
   startLatitude?: number;
   startLongitude?: number;
   endLatitude?: number;
@@ -58,13 +63,20 @@ export async function findMatchingPartners(
     bookingUser.blocksReceived.forEach((b) => blockedUserIds.add(b.blockerId));
 
     // Query partners who:
-    // - Provide the service type
+    // - Provide the service type (WALKING/CARRY_BUDDY honour capability flags;
+    //   other Expanded-Ecosystem services match any approved, available partner)
     // - Are active and approved
     // - Are currently available
     // - Haven't been blocked
+    const capabilityFilter =
+      criteria.serviceType === "WALKING"
+        ? { providesWalking: true }
+        : criteria.serviceType === "CARRY_BUDDY"
+          ? { providesCarry: true }
+          : {};
     const partners = await prisma.partner.findMany({
       where: {
-        ...(criteria.serviceType === "WALKING" ? { providesWalking: true } : { providesCarry: true }),
+        ...capabilityFilter,
         status: "APPROVED",
         isAvailable: true,
         user: {
@@ -86,7 +98,6 @@ export async function findMatchingPartners(
     });
 
     if (partners.length === 0) {
-      console.log(`[MATCHING] No available partners found for ${criteria.serviceType}`);
       return [];
     }
 
@@ -198,7 +209,6 @@ export async function assignPartnerToBooking(
     const matches = await findMatchingPartners(bookingId, criteria, 3);
 
     if (matches.length === 0) {
-      console.log(`[ASSIGNMENT] No suitable partners found for booking ${bookingId}`);
       return null;
     }
 
@@ -208,23 +218,31 @@ export async function assignPartnerToBooking(
       throw new Error("Booking not found");
     }
 
-    // Try direct assignment to best partner first (if score > 80)
+    // Try direct assignment to best partner first (if score > 80).
+    // Conditional update: never clobbers a booking that a partner already
+    // accepted manually while matching was in flight.
     if (matches[0].totalScore > 80) {
       const bestMatch = matches[0];
-      const assigned = await prisma.booking.update({
-        where: { id: bookingId },
+      const claimed = await prisma.booking.updateMany({
+        where: { id: bookingId, status: "PARTNER_SEARCHING", partnerId: null },
         data: {
           partnerId: bestMatch.partnerId,
           status: "PARTNER_ASSIGNED", // New status
         },
       });
 
+      if (claimed.count !== 1) {
+        return null;
+      }
+
+      const assigned = await prisma.booking.findUnique({ where: { id: bookingId } });
+
       // Send notification to partner
       await prisma.notification.create({
         data: {
           userId: bestMatch.userId,
           title: "New Booking Available",
-          body: `${booking.serviceType === "WALKING" ? "Walking" : "Carry"} request from ${criteria.startLocation} to ${criteria.endLocation}`,
+          body: `${serviceLabel(booking.serviceType)} request from ${criteria.startLocation} to ${criteria.endLocation}`,
           data: JSON.stringify({
             bookingId,
             type: "BOOKING_REQUEST",
@@ -232,10 +250,6 @@ export async function assignPartnerToBooking(
           }),
         },
       });
-
-      console.log(
-        `[ASSIGNMENT] Assigned partner ${bestMatch.userId} to booking ${bookingId} (score: ${bestMatch.totalScore})`
-      );
 
       return { partnerId: bestMatch.partnerId, userId: bestMatch.userId };
     }
@@ -246,7 +260,7 @@ export async function assignPartnerToBooking(
       await prisma.notification.create({
         data: {
           userId: match.userId,
-          title: `${booking.serviceType === "WALKING" ? "Walking" : "Carry"} Request Nearby`,
+          title: `${serviceLabel(booking.serviceType)} Request Nearby`,
           body: `${match.distance.toFixed(1)}km away • ₹${booking.partnerEarning?.toFixed(0)} • ${criteria.durationMinutes ?? 30} min`,
           data: JSON.stringify({
             bookingId,
@@ -272,9 +286,6 @@ export async function assignPartnerToBooking(
       },
     });
 
-    console.log(
-      `[ASSIGNMENT] Sent offers to ${matches.length} partners for booking ${bookingId}`
-    );
     return null; // Waiting for partner to accept
   } catch (err) {
     console.error("[ASSIGNMENT] Error assigning partner:", err);

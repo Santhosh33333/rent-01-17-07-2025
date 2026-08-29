@@ -9,6 +9,7 @@ import { api } from '../../lib/api'
 import { AnimatedPage } from '../../components/AnimatedPage'
 import { GlassCard } from '../../components/GlassCard'
 import { SkeletonLoader } from '../../components/SkeletonLoader'
+import { RoleSwitcher } from '../../components/RoleSwitcher'
 
 interface PartnerStats {
   totalJobs: number
@@ -173,6 +174,8 @@ export function PartnerProfilePage() {
                     <ChevronRight className="w-4 h-4 text-surface-400 group-hover:text-emerald-500 transition-colors" />
                   </Link>
                 ))}
+                {/* Switch back to the USER (or other) account */}
+                <RoleSwitcher />
               </div>
             </GlassCard>
 

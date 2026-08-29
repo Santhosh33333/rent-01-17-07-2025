@@ -77,8 +77,9 @@ export function CarryBuddyProfilePage() {
         }
 
         if (reviewsRes.status === 'fulfilled') {
-          const data = Array.isArray(reviewsRes.value.data) ? reviewsRes.value.data : reviewsRes.value.data?.data ?? []
-          setReviews(data.slice(0, 5))
+          const root = reviewsRes.value.data
+          const items = Array.isArray(root) ? root : (root?.data?.items ?? root?.data ?? [])
+          setReviews((Array.isArray(items) ? items : []).slice(0, 5))
         }
       } catch {
         setError('Failed to load profile')

@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
 import {
-  Dog, MapPin, DollarSign, Plus, AlertTriangle,
+  Dog, MapPin, IndianRupee, Plus, AlertTriangle,
   Clock, Search, CheckCircle, Hourglass, Footprints
 } from 'lucide-react'
 import { api } from '../../lib/api'
+import { formatINR } from '../../lib/format'
 import { AnimatedPage } from '../../components/AnimatedPage'
 import { PageHeader } from '../../components/PageHeader'
 import { EmptyState } from '../../components/EmptyState'
@@ -38,7 +39,7 @@ export function WalkingRequestsPage() {
       try {
         const res = await api.get('/walking-requests')
         const data = res.data?.data || res.data || []
-        setRequests(Array.isArray(data) ? data : [])
+        setRequests(Array.isArray(data) ? data : (data.items || []))
       } catch {
         setError('Failed to load walking requests')
       } finally {
@@ -171,10 +172,10 @@ export function WalkingRequestsPage() {
                     </div>
                   </div>
                   <div className="text-right flex flex-col items-end gap-2">
-                    <span className="flex items-center gap-1 text-sm font-bold text-surface-900 dark:text-white">
-                      <DollarSign className="w-3.5 h-3.5 text-emerald-500" />
-                      {req.reward.toFixed(2)}
-                    </span>
+                      <span className="flex items-center gap-1 text-sm font-bold text-surface-900 dark:text-white">
+                        <IndianRupee className="w-3.5 h-3.5 text-emerald-500" />
+                        {formatINR(req.reward)}
+                      </span>
                     <span className={statusConfig[req.status].badge}>
                       {statusConfig[req.status].label}
                     </span>

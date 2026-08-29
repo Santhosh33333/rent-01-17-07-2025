@@ -1,37 +1,98 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { MessageCircle, Search, ChevronRight, Clock } from 'lucide-react'
 import { api } from '../../lib/api'
+import { useAuth } from '../../lib/auth'
+import { useSocket } from '../../hooks/useSocket'
 import { AnimatedPage } from '../../components/AnimatedPage'
 import { EmptyState } from '../../components/EmptyState'
 import { SkeletonLoader } from '../../components/SkeletonLoader'
 import { useAsync } from '../../hooks/useAsync'
 
 interface Conversation {
-  id: number
-  name: string
-  lastMessage: string
-  time: string
-  unread: boolean
-  online?: boolean
+  conversationId: string
+  partnerId: string | null
+  partnerName: string
+  partnerAvatar: string | null
+  lastMessage: string | null
+  lastMessageAt: string | null
+  unreadCount: number
+}
+
+function timeAgo(iso: string | null): string {
+  if (!iso) return ''
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'now'
+  if (mins < 60) return `${mins}m`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h`
+  return `${Math.floor(hrs / 24)}d`
 }
 
 export function MessagesPage() {
   const [search, setSearch] = useState('')
   const [conversations, setConversations] = useState<Conversation[]>([])
+  const { user } = useAuth()
+  const myId = user?.id
+  const { on } = useSocket({ autoConnect: true })
 
-  const { loading, error, retry } = useAsync(
-    async () => {
-      const res = await api.get('/messages/conversations')
-      const data = res.data?.data || res.data || []
-      setConversations(data)
-      return data
-    },
-    true
-  )
+  const fetchConversations = useCallback(async () => {
+    const res = await api.get('/messages/conversations')
+    const d = res.data?.data || {}
+    const items: Conversation[] = Array.isArray(d) ? d : d.items || []
+    setConversations(items.filter((c) => c.partnerId))
+    return items
+  }, [])
 
-  const filtered = conversations.filter(c => c.name.toLowerCase().includes(search.toLowerCase()))
-  const unreadCount = conversations.filter(c => c.unread).length
+  const { loading, error, retry } = useAsync(fetchConversations, true)
+
+  // Real-time: incoming messages bump the matching conversation to the top, refresh
+  // its preview, and increment the unread badge — without waiting for the poll.
+  useEffect(() => {
+    if (!myId) return
+    const off = on('new_message', (data: unknown) => {
+      const msg = data as {
+        conversationId: string
+        senderId: string
+        content: string
+        timestamp?: string | number
+      }
+      if (!msg?.conversationId) return
+      const ts =
+        typeof msg.timestamp === 'string'
+          ? msg.timestamp
+          : new Date(msg.timestamp || Date.now()).toISOString()
+      setConversations((prev) => {
+        const idx = prev.findIndex((c) => c.conversationId === msg.conversationId)
+        if (idx === -1) {
+          // Unknown conversation (e.g. a freshly accepted chat) — pull latest from server.
+          fetchConversations().catch(() => {})
+          return prev
+        }
+        const list = [...prev]
+        const c = { ...list[idx] }
+        c.lastMessage = msg.content
+        c.lastMessageAt = ts
+        if (msg.senderId !== myId) c.unreadCount = (c.unreadCount || 0) + 1
+        list.splice(idx, 1)
+        list.unshift(c)
+        return list
+      })
+    })
+    return () => off && off()
+  }, [myId, on, fetchConversations])
+
+  // Keep the list and unread badges fresh (also clears unread after you read a thread).
+  useEffect(() => {
+    const poll = setInterval(() => {
+      fetchConversations().catch(() => {})
+    }, 8000)
+    return () => clearInterval(poll)
+  }, [fetchConversations])
+
+  const filtered = conversations.filter(c => c.partnerName.toLowerCase().includes(search.toLowerCase()))
+  const unreadCount = conversations.filter(c => c.unreadCount > 0).length
 
   if (loading) {
     return (
@@ -95,33 +156,34 @@ export function MessagesPage() {
               description={search ? 'Try a different search term' : 'Start chatting with your walking partners!'} />
           ) : (
             filtered.map((conv) => (
-              <Link key={conv.id} to={`/messages/${conv.id}`}
+              <Link key={conv.conversationId} to={`/messages/${conv.partnerId}`} state={{ name: conv.partnerName }}
                 className="block p-4 hover:bg-surface-50 dark:hover:bg-surface-800/50 transition-colors group">
                 <div className="flex items-center gap-4">
                   <div className="relative flex-shrink-0">
                     <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white font-bold text-sm shadow-md shadow-primary-500/20">
-                      {conv.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
+                      {conv.partnerName.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
                     </div>
-                    {conv.online && (
-                      <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 border-2 border-white dark:border-surface-900 rounded-full" />
-                    )}
                   </div>
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-0.5">
-                      <h3 className={`text-sm font-bold ${conv.unread ? 'text-surface-900 dark:text-white' : 'text-surface-700 dark:text-surface-300'}`}>
-                        {conv.name}
+                      <h3 className={`text-sm font-bold ${conv.unreadCount > 0 ? 'text-surface-900 dark:text-white' : 'text-surface-700 dark:text-surface-300'}`}>
+                        {conv.partnerName}
                       </h3>
                       <span className="text-xs text-surface-400 flex items-center gap-1">
-                        <Clock className="w-3 h-3" /> {conv.time}
+                        <Clock className="w-3 h-3" /> {timeAgo(conv.lastMessageAt)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <p className={`text-sm truncate ${conv.unread ? 'text-surface-700 dark:text-surface-300 font-medium' : 'text-surface-500 dark:text-surface-400'}`}>
-                        {conv.lastMessage}
+                      <p className={`text-sm truncate ${conv.unreadCount > 0 ? 'text-surface-700 dark:text-surface-300 font-medium' : 'text-surface-500 dark:text-surface-400'}`}>
+                        {conv.lastMessage ?? 'Say hello 👋'.replace(' 👋','')}
                       </p>
                       <div className="flex items-center gap-2 ml-2">
-                        {conv.unread && <span className="w-2.5 h-2.5 rounded-full bg-primary-500" />}
+                        {conv.unreadCount > 0 && (
+                          <span className="min-w-[1.25rem] h-5 px-1.5 rounded-full bg-primary-500 text-white text-xs font-bold flex items-center justify-center">
+                            {conv.unreadCount}
+                          </span>
+                        )}
                         <ChevronRight className="w-4 h-4 text-surface-300 dark:text-surface-600 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
                     </div>

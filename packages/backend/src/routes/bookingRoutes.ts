@@ -1,18 +1,24 @@
 import { Router } from "express";
 import { body } from "express-validator";
-import { authenticateToken } from "../middleware/auth";
+import { authenticateToken, requireKycVerified } from "../middleware/auth";
 import { sanitizeInput, validateRequest } from "../middleware/validation";
 import * as bookingController from "../controllers/bookingController";
+import { SERVICE_KEYS } from "../services/serviceCatalog";
 
 const router = Router();
 
-router.use(authenticateToken);
+router.use(authenticateToken, requireKycVerified);
 
 // Create booking
 router.post(
   "/",
   [
-    body("serviceType").notEmpty().isIn(["WALKING", "CARRY_BUDDY"]),
+    body("serviceType").custom((value) => {
+      if (Array.isArray(value)) {
+        return value.length > 0 && value.every((item) => SERVICE_KEYS.includes(item));
+      }
+      return typeof value === "string" && SERVICE_KEYS.includes(value);
+    }),
     body("startLocation").notEmpty().trim().isLength({ min: 2, max: 200 }),
     body("endLocation").notEmpty().trim().isLength({ min: 2, max: 200 }),
     body("scheduledAt").notEmpty().isISO8601(),
@@ -89,6 +95,21 @@ router.post(
   bookingController.rateBooking
 );
 
+// Rate customer (partner)
+router.post(
+  "/:id/rate-user",
+  [
+    body("score").notEmpty().isInt({ min: 1, max: 5 }),
+    body("comment").optional().isString().trim().isLength({ max: 500 }),
+  ],
+  sanitizeInput,
+  validateRequest,
+  bookingController.rateUserByPartner
+);
+
+// Booking receipt
+router.get("/:id/receipt", bookingController.getBookingReceipt);
+
 // Select payment method (after partner accepts)
 router.post(
   '/:id/select-payment-method',
@@ -102,3 +123,4 @@ router.post(
 router.post('/:id/confirm-cash', bookingController.confirmCashReceived);
 
 export default router;
+
